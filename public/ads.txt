@@ -1,0 +1,7 @@
+# ads.txt — authorized digital sellers
+#
+# Add your real Google AdSense publisher line before enabling ads, for example:
+# google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0
+#
+# Do not publish a placeholder publisher ID.
+# See: https://support.google.com/adsense/answer/7532444

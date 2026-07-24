@@ -1,0 +1,409 @@
+@import "tailwindcss";
+
+/* Scan all app source files for class names (components + pages). */
+@source "../**/*.tsx";
+@source "../**/*.ts";
+@source "../**/*.jsx";
+@source "../**/*.js";
+
+:root {
+  /* Googie Tools brand palette — keep values centralized here */
+  --background: #f8fafc;
+  --foreground: #1f2937;
+  /* Slightly richer muted text for desktop readability */
+  --muted: #475569;
+  --surface: #ffffff;
+  --border: #d8e0ea;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #dbeafe;
+  /* Lighter chip fill so tool icons read with more contrast */
+  --accent-tint: #f0f6ff;
+  --accent-foreground: #ffffff;
+  --sparkle: #facc15;
+  --success: #059669;
+  --error: #dc2626;
+  --ring: #2563eb;
+  --shadow-color: 31 41 55;
+
+  /* Layout tokens */
+  --content-max: 75rem; /* 1200px */
+  --control-height: 2.75rem; /* 44px */
+  --control-height-lg: 3rem; /* 48px */
+  /*
+   * Stack cramped side-by-side tool controls below this width.
+   * Mirrored as Tailwind `--breakpoint-tool` (creates `tool:` variant).
+   */
+  --bp-tool-stack: 28rem; /* 448px */
+  /* Shared top offset for every primary page title (Home, tools, About, etc.) */
+  --page-title-pt: 0.75rem;
+  --page-title-pt-sm: 1rem;
+  /* Sticky header height — keep scroll targets (titles, #tools) clear of it */
+  --site-header-height: 4.25rem;
+  --site-header-height-sm: 4.5rem;
+
+  --shadow-sm:
+    0 1px 2px rgb(var(--shadow-color) / 0.05),
+    0 1px 3px rgb(var(--shadow-color) / 0.07);
+  --shadow-md:
+    0 4px 6px -1px rgb(var(--shadow-color) / 0.06),
+    0 10px 22px -4px rgb(var(--shadow-color) / 0.1);
+  --shadow-lg:
+    0 10px 15px -3px rgb(var(--shadow-color) / 0.07),
+    0 22px 42px -8px rgb(var(--shadow-color) / 0.12);
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+
+  /* Type scale helpers */
+  --text-helper: 0.875rem; /* 14px */
+  --text-body: 1.0625rem; /* 17px */
+  --leading-body: 1.65;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-sparkle: var(--sparkle);
+  --color-success: var(--success);
+  --color-error: var(--error);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-jakarta);
+  --font-display: var(--font-sora);
+  --shadow-soft-sm: var(--shadow-sm);
+  --shadow-soft-md: var(--shadow-md);
+  --shadow-soft-lg: var(--shadow-lg);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  /* Custom min-width breakpoint for tool control rows (see --bp-tool-stack). */
+  --breakpoint-tool: 28rem;
+}
+
+html {
+  /* Keep in-page jumps (e.g. #tools) below the sticky header */
+  scroll-padding-top: var(--site-header-height);
+  /* Prevent rare wide children from creating page-level sideways scroll */
+  overflow-x: clip;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 80% 45% at 50% -20%, #dbeafe 0%, transparent 55%),
+    var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  min-height: 100vh;
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (min-width: 640px) {
+  html {
+    scroll-padding-top: var(--site-header-height-sm);
+  }
+}
+
+/* Smooth scrolling only for same-page hash links — not route changes */
+@media (prefers-reduced-motion: no-preference) {
+  html:has(:target) {
+    scroll-behavior: smooth;
+  }
+}
+
+#main-content {
+  scroll-margin-top: var(--site-header-height);
+}
+
+@media (min-width: 640px) {
+  #main-content {
+    scroll-margin-top: var(--site-header-height-sm);
+  }
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--foreground);
+}
+
+/* Photoshop-style transparency indicator for PNG / WebP previews */
+.bg-transparency-checker {
+  background-color: #ffffff;
+  background-image: conic-gradient(
+    #c8c8c8 0.25turn,
+    #ffffff 0.25turn 0.5turn,
+    #c8c8c8 0.5turn 0.75turn,
+    #ffffff 0.75turn
+  );
+  background-size: 16px 16px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Skip link: hidden until keyboard focus (accessibility) */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+}
+
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  display: inline-flex;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  padding: 0.75rem 1.125rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--accent-foreground);
+  box-shadow: var(--shadow-md);
+}
+
+#main-content:focus {
+  outline: none;
+}
+
+#main-content:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+
+/* Shared control surface used by inputs / selects */
+.control-field {
+  min-height: var(--control-height);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0.7rem 1rem;
+  font-size: 1rem;
+  line-height: 1.4;
+  color: var(--foreground);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Native colour picker — one filled swatch, same radius as .control-field */
+.colour-swatch-input {
+  -webkit-appearance: none;
+  appearance: none;
+  height: var(--control-height);
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.colour-swatch-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.colour-swatch-input::-webkit-color-swatch {
+  border: none;
+  border-radius: calc(var(--radius-md) - 1px);
+}
+
+.colour-swatch-input::-moz-color-swatch {
+  border: none;
+  border-radius: calc(var(--radius-md) - 1px);
+}
+
+/* Shared range controls — password length + image quality */
+.password-length-slider,
+.image-quality-slider {
+  --slider-thumb-size: 25px;
+  height: 0.5rem;
+  accent-color: var(--accent);
+}
+
+.password-length-slider::-webkit-slider-thumb,
+.image-quality-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  margin-top: calc((0.5rem - var(--slider-thumb-size)) / 2);
+  border-radius: 9999px;
+  border: 2px solid var(--surface);
+  background: var(--accent);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.password-length-slider::-moz-range-thumb,
+.image-quality-slider::-moz-range-thumb {
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  border-radius: 9999px;
+  border: 2px solid var(--surface);
+  background: var(--accent);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.password-length-slider::-webkit-slider-runnable-track,
+.image-quality-slider::-webkit-slider-runnable-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--border);
+}
+
+.password-length-slider::-moz-range-track,
+.image-quality-slider::-moz-range-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--border);
+}
+
+/* Restrained motion helpers — disabled under prefers-reduced-motion */
+@keyframes googie-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes googie-sparkle-burst {
+  0% {
+    opacity: 0;
+    transform: rotate(0deg) scale(0.45);
+  }
+  22% {
+    opacity: 1;
+    transform: rotate(110deg) scale(1.2);
+  }
+  48% {
+    opacity: 1;
+    transform: rotate(200deg) scale(1.35);
+  }
+  72% {
+    opacity: 0.95;
+    transform: rotate(280deg) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(360deg) scale(0.35);
+  }
+}
+
+@keyframes googie-sparkle-morph-rounded {
+  0%,
+  28% {
+    opacity: 1;
+  }
+  40%,
+  62% {
+    opacity: 0;
+  }
+  78%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes googie-sparkle-morph-sharp {
+  0%,
+  28% {
+    opacity: 0;
+  }
+  40%,
+  62% {
+    opacity: 1;
+  }
+  78%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.motion-fade-up {
+  animation: googie-fade-up 280ms ease-out both;
+}
+
+.sparkle-burst {
+  animation: googie-sparkle-burst 900ms ease-out both;
+}
+
+.sparkle-burst__rounded {
+  animation: googie-sparkle-morph-rounded 900ms ease-out both;
+}
+
+.sparkle-burst__sharp {
+  animation: googie-sparkle-morph-sharp 900ms ease-out both;
+}
+
+/* Respect users who prefer less motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .motion-fade-up,
+  .sparkle-burst,
+  .sparkle-burst__rounded,
+  .sparkle-burst__sharp {
+    animation: none !important;
+  }
+
+  .sparkle-burst {
+    opacity: 1;
+    transform: none;
+  }
+
+  .sparkle-burst__sharp {
+    opacity: 0 !important;
+  }
+
+  .sparkle-burst__rounded {
+    opacity: 1 !important;
+  }
+}
+
+/* Hide scrollbars and block page scroll during fullscreen colour test. */
+html.colour-test-scroll-lock,
+html.colour-test-scroll-lock body {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+  height: 100% !important;
+  scrollbar-width: none;
+}
+
+html.colour-test-scroll-lock::-webkit-scrollbar,
+html.colour-test-scroll-lock body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
