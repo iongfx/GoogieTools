@@ -118,6 +118,6 @@ export const COLOUR_TOOL_FAQ: FaqItem[] = [
   {
     question: "Can rapid colour cycling cause discomfort?",
     answer:
-      "Yes. Rapid colour changes may be uncomfortable for some people. Prefer slower intervals, use Manual only when inspecting carefully, and respect your browser’s reduced-motion preference.",
+      "Yes. Rapid colour changes may be uncomfortable for some people. Prefer slower intervals, use Manual when inspecting carefully, and respect your browser’s reduced-motion preference.",
   },
 ] as const;

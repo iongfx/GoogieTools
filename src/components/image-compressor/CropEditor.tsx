@@ -52,6 +52,12 @@ type CropEditorProps = {
   onRename: (nextFilename: string) => void;
   onResetAllCrops?: () => void;
   onApplyCropToAll?: () => void;
+  /** Batch process / clear actions shown under the crop tools. */
+  processLabel?: string;
+  canProcess?: boolean;
+  onProcess?: () => void;
+  onClearBatch?: () => void;
+  clearDisabled?: boolean;
 };
 
 function DownArrowIcon({ className }: { className?: string }) {
@@ -76,7 +82,7 @@ function DownArrowIcon({ className }: { className?: string }) {
 }
 
 const DONE_EDITING_BUTTON_CLASS =
-  "!border-accent/30 !bg-accent-soft !text-accent shadow-soft-sm hover:!border-accent/50 hover:!bg-[#cfe3ff] hover:!text-accent min-w-[8.5rem]";
+  "!min-w-11 !w-11 !border-accent/30 !bg-accent-soft !px-0 !text-accent shadow-soft-sm hover:!border-accent/50 hover:!bg-[#cfe3ff] hover:!text-accent";
 
 /**
  * Large interactive Fill-and-crop preview with drag, zoom, and keyboard support.
@@ -103,6 +109,11 @@ export function CropEditor({
   onRename,
   onResetAllCrops,
   onApplyCropToAll,
+  processLabel,
+  canProcess = false,
+  onProcess,
+  onClearBatch,
+  clearDisabled = false,
 }: CropEditorProps) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [frameNode, setFrameNode] = useState<HTMLDivElement | null>(null);
@@ -524,7 +535,7 @@ export function CropEditor({
             type="button"
             variant="secondary"
             size="sm"
-            disabled={disabled || index <= 0}
+            disabled={disabled || total <= 1}
             onClick={onPrevious}
           >
             Previous
@@ -557,7 +568,7 @@ export function CropEditor({
             type="button"
             variant="secondary"
             size="sm"
-            disabled={disabled || index >= total - 1}
+            disabled={disabled || total <= 1}
             onClick={onNext}
           >
             Next
@@ -627,6 +638,55 @@ export function CropEditor({
               </>
             ) : null}
           </div>
+          {onProcess || onClearBatch ? (
+            <div className="mt-4 flex flex-row flex-wrap items-center justify-center gap-3 border-t border-border/70 pt-4">
+              {onProcess && processLabel ? (
+                <Button
+                  type="button"
+                  disabled={!canProcess || disabled}
+                  onClick={onProcess}
+                  className="min-w-0 flex-1 sm:flex-none"
+                >
+                  {processLabel}
+                </Button>
+              ) : null}
+              {onClearBatch ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={clearDisabled || disabled}
+                  onClick={onClearBatch}
+                  className="min-w-0 flex-1 sm:flex-none"
+                >
+                  Clear batch
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : onProcess || onClearBatch ? (
+        <div className="mt-[22px] flex flex-row flex-wrap items-center justify-center gap-3">
+          {onProcess && processLabel ? (
+            <Button
+              type="button"
+              disabled={!canProcess || disabled}
+              onClick={onProcess}
+              className="min-w-0 flex-1 sm:flex-none"
+            >
+              {processLabel}
+            </Button>
+          ) : null}
+          {onClearBatch ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={clearDisabled || disabled}
+              onClick={onClearBatch}
+              className="min-w-0 flex-1 sm:flex-none"
+            >
+              Clear batch
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </section>

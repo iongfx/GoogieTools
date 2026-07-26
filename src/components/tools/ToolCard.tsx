@@ -19,22 +19,26 @@ export function ToolCard({ tool, size = "default" }: ToolCardProps) {
 
   const body = (
     <>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
         <span
           className={cn(
-            "inline-flex items-center justify-center rounded-2xl border",
-            compact ? "h-9 w-9 rounded-xl" : "h-[3.15rem] w-[3.15rem]",
+            "inline-flex shrink-0 items-center justify-center rounded-2xl border",
+            compact
+              ? "h-9 w-9 rounded-xl"
+              : "h-10 w-10 sm:h-[3.15rem] sm:w-[3.15rem]",
             available
               ? "border-accent/15 bg-accent-tint text-accent"
               : "border-accent/20 bg-accent-tint text-accent/85",
           )}
         >
-          <ToolIcon icon={tool.icon} size={compact ? 24 : 32} />
+          <ToolIcon icon={tool.icon} size={compact ? 24 : 28} />
         </span>
         <span
           className={cn(
-            "rounded-full px-2.5 py-1 font-semibold",
-            compact ? "text-[0.6875rem]" : "text-xs sm:text-[0.8125rem]",
+            "rounded-full px-2 py-0.5 font-semibold sm:px-2.5 sm:py-1",
+            compact
+              ? "text-[0.6875rem]"
+              : "text-[0.625rem] sm:text-xs sm:text-[0.8125rem]",
             available
               ? "bg-success/10 text-success"
               : "bg-background text-muted",
@@ -48,7 +52,7 @@ export function ToolCard({ tool, size = "default" }: ToolCardProps) {
           "font-display font-semibold tracking-tight text-foreground",
           compact
             ? "mt-3.5 text-base sm:text-lg"
-            : "mt-5 text-xl sm:text-[1.375rem]",
+            : "mt-3.5 text-base leading-snug sm:mt-5 sm:text-xl sm:text-[1.375rem]",
         )}
       >
         {tool.name}
@@ -58,7 +62,7 @@ export function ToolCard({ tool, size = "default" }: ToolCardProps) {
           "leading-relaxed text-muted",
           compact
             ? "mt-2 text-sm sm:text-[0.9375rem]"
-            : "mt-2.5 text-[0.9375rem] sm:text-base",
+            : "mt-2 text-sm sm:mt-2.5 sm:text-[0.9375rem] sm:text-base",
         )}
       >
         {tool.shortDescription}
@@ -69,7 +73,7 @@ export function ToolCard({ tool, size = "default" }: ToolCardProps) {
             "font-semibold text-accent",
             compact
               ? "mt-3.5 text-sm sm:text-[0.9375rem]"
-              : "mt-5 text-[0.9375rem] sm:text-base",
+              : "mt-3.5 text-sm sm:mt-5 sm:text-[0.9375rem] sm:text-base",
           )}
         >
           Open tool →
@@ -80,7 +84,7 @@ export function ToolCard({ tool, size = "default" }: ToolCardProps) {
 
   const shellClass = cn(
     "block h-full rounded-2xl border border-border bg-surface shadow-soft-sm",
-    compact ? "rounded-xl p-4 sm:p-5" : "p-5 sm:p-8",
+    compact ? "rounded-xl p-3.5 sm:p-5" : "p-3.5 sm:p-5 lg:p-8",
     available &&
       "transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-soft-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
   );

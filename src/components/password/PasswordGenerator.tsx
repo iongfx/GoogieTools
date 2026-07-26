@@ -18,7 +18,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { FriendlyError } from "@/components/ui/FriendlyError";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { SuccessMessage } from "@/components/ui/SuccessMessage";
 import { PASSWORD_TOOL } from "@/config/tools";
 import {
   clampPasswordLength,
@@ -35,12 +34,24 @@ import { cn } from "@/lib/utils";
 const CATEGORY_OPTIONS: {
   id: CharacterCategory;
   label: string;
+  /** Slightly longer label for wider screens. */
+  labelWide: string;
   hint: string;
 }[] = [
-  { id: "uppercase", label: "Uppercase letters", hint: "A–Z" },
-  { id: "lowercase", label: "Lowercase letters", hint: "a–z" },
-  { id: "numbers", label: "Numbers", hint: "0–9" },
-  { id: "symbols", label: "Symbols", hint: "!@#$…" },
+  {
+    id: "uppercase",
+    label: "Uppercase",
+    labelWide: "Uppercase letters",
+    hint: "A–Z",
+  },
+  {
+    id: "lowercase",
+    label: "Lowercase",
+    labelWide: "Lowercase letters",
+    hint: "a–z",
+  },
+  { id: "numbers", label: "Numbers", labelWide: "Numbers", hint: "0–9" },
+  { id: "symbols", label: "Symbols", labelWide: "Symbols", hint: "!@#$…" },
 ];
 
 const STRENGTH_BAR_CLASS: Record<0 | 1 | 2 | 3, string> = {
@@ -303,10 +314,10 @@ export function PasswordGenerator() {
             </div>
 
             <fieldset>
-              <legend className="mb-2.5 text-[0.9375rem] font-medium text-foreground sm:text-base">
+              <legend className="mb-2 text-[0.9375rem] font-medium text-foreground sm:mb-2.5 sm:text-base">
                 Character types
               </legend>
-              <ul className="grid list-none gap-2.5 p-0 sm:grid-cols-2">
+              <ul className="grid list-none grid-cols-2 gap-2 p-0 sm:gap-2.5">
                 {CATEGORY_OPTIONS.map((item) => {
                   const checked = options[item.id];
                   const isLastEnabled =
@@ -316,25 +327,29 @@ export function PasswordGenerator() {
                     <li key={item.id}>
                       <label
                         className={cn(
-                          "flex min-h-11 cursor-pointer items-start gap-2.5 rounded-xl border border-border bg-background px-3.5 py-2.5 text-[0.9375rem] text-foreground transition-colors sm:text-base",
+                          "flex h-full min-h-10 cursor-pointer items-start gap-2 rounded-xl border border-border bg-background px-2.5 py-2 text-sm text-foreground transition-colors sm:min-h-11 sm:gap-2.5 sm:px-3.5 sm:py-2.5 sm:text-base",
                           "hover:border-accent/40",
                           checked && "border-accent/30 bg-accent-soft/40",
                         )}
                       >
                         <input
                           type="checkbox"
-                          className="mt-0.5 h-5 w-5 shrink-0 rounded border-border text-accent focus:ring-ring"
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-accent focus:ring-ring sm:h-5 sm:w-5"
                           checked={checked}
+                          aria-label={`${item.labelWide} (${item.hint})`}
                           aria-describedby={
                             isLastEnabled ? optionsErrorId : undefined
                           }
                           onChange={() => handleCategoryToggle(item.id)}
                         />
                         <span className="min-w-0">
-                          <span className="block font-medium leading-snug">
+                          <span className="block font-medium leading-snug sm:hidden">
                             {item.label}
                           </span>
-                          <span className="mt-0.5 block text-sm text-muted">
+                          <span className="hidden font-medium leading-snug sm:block">
+                            {item.labelWide}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-muted sm:text-sm">
                             {item.hint}
                           </span>
                         </span>
@@ -390,26 +405,61 @@ export function PasswordGenerator() {
           <p className="sr-only" aria-live="polite">
             {statusMessage}
           </p>
+
+          {/*
+            Actions sit under options (and above the result on small screens)
+            so the password panel can stay higher on the page.
+            Copy stays disabled until a password exists so the row does not jump.
+          */}
+          <div className="mt-6 border-t border-border pt-5 lg:hidden">
+            <div className="flex flex-col items-stretch gap-3">
+              <Button
+                type="button"
+                variant={hasPassword ? "secondary" : "primary"}
+                onClick={runGenerate}
+                className="w-full"
+              >
+                {hasPassword ? "Generate another" : "Generate password"}
+              </Button>
+              <Button
+                type="button"
+                variant={hasPassword ? "primary" : "secondary"}
+                onClick={() => void handleCopy()}
+                disabled={!hasPassword}
+                aria-disabled={!hasPassword}
+                className={cn(
+                  "w-full",
+                  !hasPassword &&
+                    "border-border bg-surface text-muted shadow-none disabled:opacity-50",
+                )}
+              >
+                Copy password
+              </Button>
+            </div>
+            <p
+              className={cn(
+                "mt-3 min-h-6 text-center text-[0.9375rem] font-medium",
+                actionIsError ? "text-error" : "text-success",
+              )}
+              role="status"
+              aria-live="polite"
+            >
+              {actionStatus ?? ""}
+            </p>
+          </div>
         </div>
 
-        {/* Result */}
+        {/* Result — sits under Generate on small screens so it stays higher */}
         <div
           ref={resultRef}
           className="order-2 scroll-mt-28 lg:sticky lg:top-24"
         >
           <ToolResultPanel
-            label="Generated password"
             animate={hasPassword}
-            className="[&>p:first-child]:pr-16"
+            contentClassName="min-h-[180px] p-4 sm:min-h-[240px] sm:p-6 lg:min-h-[360px] lg:p-8"
           >
             {hasPassword && password ? (
               <div className="flex w-full flex-col items-center">
-                <SuccessMessage
-                  title="Your password is ready"
-                  description="Copy it now or generate another one."
-                  className="mb-4 sm:mb-5"
-                />
-
                 {/* Side padding keeps both sparkles inside the panel (not clipped). */}
                 <div className="w-full max-w-md px-6 sm:px-8">
                   <div className="relative overflow-visible">
@@ -549,11 +599,8 @@ export function PasswordGenerator() {
         </div>
       </div>
 
-      {/*
-        Shared action row — same place before and after generation.
-        Copy stays invisible until a password exists so Generate does not jump.
-      */}
-      <div className="mt-6 border-t border-border pt-5">
+      {/* Desktop action row — under the two-column workspace */}
+      <div className="mt-6 hidden border-t border-border pt-5 lg:block">
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center sm:gap-3">
           <Button
             type="button"
@@ -578,10 +625,6 @@ export function PasswordGenerator() {
             Copy password
           </Button>
         </div>
-        {/*
-          Reserve a fixed-height status line so “Copied to clipboard”
-          does not shift the buttons when it appears.
-        */}
         <p
           className={cn(
             "mt-3 min-h-6 text-center text-[0.9375rem] font-medium",

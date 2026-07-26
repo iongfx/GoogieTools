@@ -21,8 +21,8 @@ export function ToolCardGrid({
   return (
     <ul
       className={cn(
-        "grid list-none gap-5 p-0 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3",
-        cardSize === "compact" && "gap-4 sm:gap-5",
+        "grid list-none grid-cols-2 gap-3 p-0 sm:gap-6 lg:grid-cols-3",
+        cardSize === "compact" && "gap-3 sm:gap-5",
         className,
       )}
     >

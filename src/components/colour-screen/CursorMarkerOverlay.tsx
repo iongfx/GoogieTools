@@ -150,6 +150,32 @@ export function CursorMarkerOverlay({
   );
 }
 
+function PreviewStepIcon({
+  direction,
+}: {
+  direction: "previous" | "next";
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="1.75rem"
+      height="1.75rem"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {direction === "previous" ? (
+        <path d="M15 5 8 12l7 7" />
+      ) : (
+        <path d="m9 5 7 7-7 7" />
+      )}
+    </svg>
+  );
+}
+
 type CursorMarkerPreviewProps = {
   background: RgbColour;
   marker: MarkerSettings;
@@ -162,6 +188,14 @@ type CursorMarkerPreviewProps = {
   boxClassName?: string;
   /** Optional control shown inside the preview (e.g. add-to-cycle). */
   action?: ReactNode;
+  /** Optional label/control at the top centre of the preview. */
+  topBanner?: ReactNode;
+  /** Step backward in a colour cycle (shows a left-side arrow when set). */
+  onPrevious?: () => void;
+  /** Step forward in a colour cycle (shows a right-side arrow when set). */
+  onNext?: () => void;
+  /** Disables the side step arrows. */
+  stepDisabled?: boolean;
   /** Double-click the preview surface (not action buttons). */
   onDoubleClick?: () => void;
 };
@@ -178,6 +212,10 @@ export function CursorMarkerPreview({
   helperText = `Filled with your selected screen colour (${formatHex(background)}). Move over the preview to try the marker.`,
   boxClassName,
   action,
+  topBanner,
+  onPrevious,
+  onNext,
+  stepDisabled = false,
   onDoubleClick,
 }: CursorMarkerPreviewProps) {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -256,6 +294,45 @@ export function CursorMarkerPreview({
             position="absolute"
             zIndex={1}
           />
+        ) : null}
+        {topBanner ? (
+          <div className="pointer-events-none absolute inset-x-0 top-3 z-[2] flex justify-center px-3">
+            {topBanner}
+          </div>
+        ) : null}
+        {onPrevious ? (
+          <button
+            type="button"
+            aria-label="Previous colour in cycle"
+            title="Previous colour in cycle"
+            disabled={stepDisabled}
+            onClick={onPrevious}
+            className={cn(
+              "absolute left-1.5 top-1/2 z-[2] inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]",
+              "transition-[transform,opacity,color] duration-200 hover:scale-110",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
+              "disabled:pointer-events-none disabled:opacity-45",
+            )}
+          >
+            <PreviewStepIcon direction="previous" />
+          </button>
+        ) : null}
+        {onNext ? (
+          <button
+            type="button"
+            aria-label="Next colour in cycle"
+            title="Next colour in cycle"
+            disabled={stepDisabled}
+            onClick={onNext}
+            className={cn(
+              "absolute right-1.5 top-1/2 z-[2] inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]",
+              "transition-[transform,opacity,color] duration-200 hover:scale-110",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
+              "disabled:pointer-events-none disabled:opacity-45",
+            )}
+          >
+            <PreviewStepIcon direction="next" />
+          </button>
         ) : null}
         {action ? (
           <div className="absolute inset-x-0 bottom-3 z-[2] flex justify-center px-3">

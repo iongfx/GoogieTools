@@ -41,23 +41,33 @@ type ChannelDrafts = Record<string, string>;
 
 function ChannelRow({
   label,
+  shortLabel,
   copyValue,
   copyAriaLabel,
   children,
 }: {
   label: string;
+  /** Narrower label for phone/tablet so channel fields keep room. */
+  shortLabel?: string;
   copyValue: string;
   copyAriaLabel: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)_auto] items-center gap-x-2">
-      <p className="text-[0.9375rem] font-medium leading-tight text-foreground sm:text-base">
-        {label}
+    <div className="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-x-1 sm:grid-cols-[3.25rem_minmax(0,1fr)_auto] sm:gap-x-1.5 lg:grid-cols-[5.5rem_minmax(0,1fr)_auto] lg:gap-x-2">
+      <p className="text-[0.6875rem] font-semibold leading-tight text-foreground sm:text-xs lg:text-[0.9375rem] lg:font-medium lg:text-base">
+        <span className="lg:hidden">{shortLabel ?? label}</span>
+        <span className="hidden lg:inline">{label}</span>
       </p>
       {/* Always 4 columns so RGB/HSL/HSV line up with CMYK C/M/Y */}
-      <div className="grid min-w-0 grid-cols-4 gap-x-2">{children}</div>
-      <CopyValueButton value={copyValue} ariaLabel={copyAriaLabel} />
+      <div className="grid min-w-0 grid-cols-4 gap-x-1 sm:gap-x-1.5 lg:gap-x-2">
+        {children}
+      </div>
+      <CopyValueButton
+        value={copyValue}
+        ariaLabel={copyAriaLabel}
+        className="!h-8 !w-8 lg:!h-10 lg:!w-10"
+      />
     </div>
   );
 }
@@ -81,10 +91,14 @@ function MiniField({
   borderColour?: string;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
+    <div className="flex min-w-0 items-center justify-center gap-1 lg:justify-start lg:gap-1.5">
+      {/*
+        Phone/tablet already show RGB/HSL/HSV/CMYK on the left — hide the
+        per-channel letter there and keep it for wider screens + screen readers.
+      */}
       <Label
         htmlFor={id}
-        className="mb-0 w-3.5 shrink-0 text-center text-[0.9375rem] font-medium text-muted sm:text-base"
+        className="mb-0 hidden w-3.5 shrink-0 text-center text-[0.9375rem] font-medium text-muted lg:block lg:text-base"
       >
         {label}
       </Label>
@@ -96,11 +110,12 @@ function MiniField({
         max={max}
         onChange={(event) => onChange(event.target.value)}
         className={cn(
-          "h-10 w-[3.25rem] shrink-0 rounded-lg border border-border bg-surface",
-          "px-1 text-center font-mono text-[0.9375rem] text-foreground shadow-soft-sm sm:text-base",
+          "h-9 w-full min-w-0 max-w-[3rem] rounded-md border border-border bg-surface",
+          "px-0.5 text-center font-mono text-sm text-foreground shadow-soft-sm tabular-nums",
           "transition-[border-color,box-shadow] duration-200",
           "hover:border-accent/40",
           "focus:border-accent focus:outline-none focus:ring-2 focus:ring-ring/25",
+          "lg:h-10 lg:w-[3.25rem] lg:max-w-none lg:shrink-0 lg:rounded-lg lg:px-1 lg:text-[0.9375rem] lg:text-base",
           borderColour && "border-2",
         )}
         style={borderColour ? { borderColor: borderColour } : undefined}
@@ -117,10 +132,13 @@ export function ColourPickerAndHex({
   colour,
   onChange,
   className,
+  onPickerOpen,
 }: {
   colour: RgbColour;
   onChange: (colour: RgbColour) => void;
   className?: string;
+  /** Called when the colour picker dropdown is opened. */
+  onPickerOpen?: () => void;
 }) {
   const baseId = useId();
   const hex = rgbToHex(colour);
@@ -131,19 +149,22 @@ export function ColourPickerAndHex({
 
   return (
     <div className={cn("space-y-2", className)}>
-      <div className="grid items-center gap-x-4 gap-y-2 [grid-template-columns:7.75rem_9.1rem_auto]">
+      <div className="grid grid-cols-[7.75rem_minmax(0,1fr)] items-center gap-x-4 gap-y-2 sm:[grid-template-columns:7.75rem_9.1rem_auto]">
         <Label htmlFor={`${baseId}-picker`} className="mb-0 shrink-0">
           Colour picker
         </Label>
         <ColourPickerDropdown
           id={`${baseId}-picker`}
           colour={colour}
+          onOpenChange={(open) => {
+            if (open) onPickerOpen?.();
+          }}
           onChange={(next) => {
             setError(null);
             onChange(next);
           }}
         />
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="col-span-2 flex min-w-0 items-center gap-1.5 sm:col-span-1">
           <Label htmlFor={`${baseId}-hex`} className="mb-0 w-8 shrink-0">
             HEX
           </Label>
@@ -152,7 +173,7 @@ export function ColourPickerAndHex({
             value={displayHex}
             spellCheck={false}
             autoComplete="off"
-            className="w-[9.5rem] font-mono"
+            className="min-w-0 flex-1 font-mono sm:w-[9.5rem] sm:flex-none"
             onFocus={() => {
               setHexFocused(true);
               setHexDraft(hex);
@@ -239,7 +260,7 @@ export function MarkerColourPicker({
 
   return (
     <div className={cn("space-y-2", className)}>
-      <div className="grid items-center gap-x-4 gap-y-2 [grid-template-columns:7.75rem_9.1rem_auto]">
+      <div className="grid grid-cols-[7.75rem_minmax(0,1fr)] items-center gap-x-4 gap-y-2 sm:[grid-template-columns:7.75rem_9.1rem_auto]">
         <Label htmlFor={`${baseId}-picker`} className="mb-0 shrink-0">
           Cursor Marker
         </Label>
@@ -253,7 +274,7 @@ export function MarkerColourPicker({
             onChange(next);
           }}
         />
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="col-span-2 flex min-w-0 items-center gap-1.5 sm:col-span-1">
           <Label htmlFor={`${baseId}-rgb`} className="mb-0 w-8 shrink-0">
             RGB
           </Label>
@@ -262,7 +283,7 @@ export function MarkerColourPicker({
             value={displayRgb}
             spellCheck={false}
             autoComplete="off"
-            className="w-[9.5rem] font-mono tabular-nums"
+            className="min-w-0 flex-1 font-mono tabular-nums sm:w-[9.5rem] sm:flex-none"
             aria-label="Marker RGB values"
             onFocus={() => {
               setRgbFocused(true);
@@ -448,6 +469,7 @@ export function ColourFormatControls({
 
       <ChannelRow
         label="HSV / HSB"
+        shortLabel="HSV"
         copyValue={formatChannelsForCopy(hsv.h, hsv.s, hsv.v)}
         copyAriaLabel="Copy HSV values"
       >

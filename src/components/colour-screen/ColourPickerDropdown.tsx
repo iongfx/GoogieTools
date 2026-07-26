@@ -36,6 +36,8 @@ type ColourPickerDropdownProps = {
    * - above-left: opens up and left from the swatch’s top-left corner (cursor marker)
    */
   panelPlacement?: "auto" | "above-left";
+  /** Fires when the dropdown opens or closes. */
+  onOpenChange?: (open: boolean) => void;
 };
 
 declare global {
@@ -62,6 +64,7 @@ export function ColourPickerDropdown({
   className,
   triggerShape = "rect",
   panelPlacement = "auto",
+  onOpenChange,
 }: ColourPickerDropdownProps) {
   const generatedId = useId();
   const triggerId = id ?? generatedId;
@@ -282,7 +285,13 @@ export function ColourPickerDropdown({
             : "colour-swatch-input w-[9.1rem]",
         )}
         style={{ backgroundColor: rgbToCss(colour) }}
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => {
+          setOpen((prev) => {
+            const next = !prev;
+            onOpenChange?.(next);
+            return next;
+          });
+        }}
         aria-label={`Colour picker, current colour ${hex}`}
       />
 

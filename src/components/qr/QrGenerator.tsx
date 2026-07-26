@@ -249,9 +249,12 @@ export function QrGenerator() {
     };
   }, [mode, urlInput, textInput, wifi, styleId, touched]);
 
-  function handleGenerate(event: FormEvent) {
+  function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setTouched(true);
+
+    // URL and Text update the live preview as you type — no submit needed.
+    if (mode !== "wifi") return;
 
     const result = resolvePayload(mode, urlInput, textInput, wifi);
     if (!result.ok) {
@@ -382,7 +385,7 @@ export function QrGenerator() {
       className="border-border shadow-soft-md"
     >
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.95fr)] lg:items-start lg:gap-x-12 lg:gap-y-8">
-        {/* 1) Inputs + Create — first on all screens */}
+        {/* 1) Inputs — first on all screens */}
         <div className="order-1 min-w-0">
           <div
             className="inline-flex w-full rounded-xl border border-border bg-background p-1.5 sm:w-auto"
@@ -414,7 +417,7 @@ export function QrGenerator() {
             })}
           </div>
 
-          <form onSubmit={handleGenerate} className="mt-6 space-y-6" noValidate>
+          <form onSubmit={handleSubmit} className="mt-6 space-y-6" noValidate>
             {mode === "url" ? (
               <div>
                 <Label htmlFor={inputId}>Website URL</Label>
@@ -604,9 +607,15 @@ export function QrGenerator() {
             </fieldset>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <Button type="submit" disabled={busy} className="w-full sm:w-auto">
-                {isPending ? "Creating…" : "Create QR code"}
-              </Button>
+              {mode === "wifi" ? (
+                <Button
+                  type="submit"
+                  disabled={busy}
+                  className="w-full sm:w-auto"
+                >
+                  {isPending ? "Creating…" : "Create QR code"}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="secondary"

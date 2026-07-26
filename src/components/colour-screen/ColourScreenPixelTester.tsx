@@ -131,8 +131,8 @@ function ChevronLeftIcon({ className }: { className?: string }) {
     <svg
       aria-hidden="true"
       viewBox="0 0 24 24"
-      width="2rem"
-      height="2rem"
+      width="1.25rem"
+      height="1.25rem"
       className={className}
       fill="none"
       stroke="currentColor"
@@ -150,8 +150,8 @@ function ChevronRightIcon({ className }: { className?: string }) {
     <svg
       aria-hidden="true"
       viewBox="0 0 24 24"
-      width="2rem"
-      height="2rem"
+      width="1.25rem"
+      height="1.25rem"
       className={className}
       fill="none"
       stroke="currentColor"
@@ -204,8 +204,13 @@ export function ColourScreenPixelTester() {
   });
   const cycleTimerRef = useRef<number | null>(null);
   const previewCycleTimerRef = useRef<number | null>(null);
+  const cycleIndexRef = useRef(cycleIndex);
   /** True when fullscreen started on the screen preview colour (not yet in the cycle). */
   const pendingCycleEntryRef = useRef(false);
+
+  useEffect(() => {
+    cycleIndexRef.current = cycleIndex;
+  }, [cycleIndex]);
 
   useEffect(() => {
     setEyeDropperSupported(typeof window !== "undefined" && "EyeDropper" in window);
@@ -244,6 +249,19 @@ export function ColourScreenPixelTester() {
 
   const delayMs = useMemo(() => resolveCycleDelayMs(cycle), [cycle]);
 
+  const cycleDelayLabel = useMemo(() => {
+    if (cycle.delayPreset === "manual") return "Manual";
+    if (cycle.delayPreset === "custom") {
+      const seconds = Number(cycle.customSeconds);
+      const rounded =
+        Number.isFinite(seconds) && seconds % 1 !== 0
+          ? seconds.toFixed(1)
+          : String(Number.isFinite(seconds) ? seconds : cycle.customSeconds);
+      return `${rounded} sec.`;
+    }
+    return `${cycle.delayPreset} sec.`;
+  }, [cycle.customSeconds, cycle.delayPreset]);
+
   const photosensitivityWarn =
     cycle.delayPreset === "custom" &&
     cycle.customSeconds < CYCLE_LIMITS.photosensitivityWarnBelowSeconds;
@@ -260,42 +278,42 @@ export function ColourScreenPixelTester() {
     setCycleIndex(match);
   }, [background, cycle.items, cycleIndex]);
 
+  const applyCycleIndex = useCallback(
+    (index: number) => {
+      const item = cycle.items[index];
+      if (!item?.enabled) return;
+      // Copy RGB so React always sees a new state value (presets share objects).
+      setBackground({ r: item.rgb.r, g: item.rgb.g, b: item.rgb.b });
+      setCycleIndex(index);
+      cycleIndexRef.current = index;
+    },
+    [cycle.items],
+  );
+
   const advanceColour = useCallback(
     (options?: { ignoreLoop?: boolean }) => {
       // First step after fullscreen: leave the preview colour and enter the cycle.
       if (pendingCycleEntryRef.current) {
         pendingCycleEntryRef.current = false;
-        setCycleIndex((current) => {
-          let index = current;
-          if (!cycle.items[index]?.enabled) {
-            const firstEnabled = cycle.items.findIndex((item) => item.enabled);
-            if (firstEnabled >= 0) index = firstEnabled;
-          }
-          const item = cycle.items[index];
-          if (item?.enabled) {
-            setBackground(item.rgb);
-          }
-          return index;
-        });
+        let index = cycleIndexRef.current;
+        if (!cycle.items[index]?.enabled) {
+          const firstEnabled = cycle.items.findIndex((item) => item.enabled);
+          if (firstEnabled >= 0) index = firstEnabled;
+        }
+        applyCycleIndex(index);
         return;
       }
 
       const loop = options?.ignoreLoop ? true : cycle.loop;
-      setCycleIndex((current) => {
-        const next = nextCycleIndex(
-          cycle.items,
-          current,
-          cycle.order,
-          loop,
-        );
-        const item = cycle.items[next];
-        if (item?.enabled) {
-          setBackground(item.rgb);
-        }
-        return next;
-      });
+      const next = nextCycleIndex(
+        cycle.items,
+        cycleIndexRef.current,
+        cycle.order,
+        loop,
+      );
+      applyCycleIndex(next);
     },
-    [cycle.items, cycle.loop, cycle.order],
+    [applyCycleIndex, cycle.items, cycle.loop, cycle.order],
   );
 
   const previousColour = useCallback(
@@ -303,32 +321,53 @@ export function ColourScreenPixelTester() {
       // From the intro preview colour, step back into the end of the cycle.
       if (pendingCycleEntryRef.current) {
         pendingCycleEntryRef.current = false;
-        setCycleIndex((current) => {
-          const enabledIndexes = cycle.items
-            .map((item, index) => (item.enabled ? index : -1))
-            .filter((index) => index >= 0);
-          if (enabledIndexes.length === 0) return current;
-          const last = enabledIndexes[enabledIndexes.length - 1];
-          const item = cycle.items[last];
-          if (item?.enabled) {
-            setBackground(item.rgb);
-          }
-          return last;
-        });
+        const enabledIndexes = cycle.items
+          .map((item, index) => (item.enabled ? index : -1))
+          .filter((index) => index >= 0);
+        if (enabledIndexes.length === 0) return;
+        applyCycleIndex(enabledIndexes[enabledIndexes.length - 1]);
         return;
       }
 
       const loop = options?.ignoreLoop ? true : cycle.loop;
-      setCycleIndex((current) => {
-        const next = previousCycleIndex(cycle.items, current, loop);
-        const item = cycle.items[next];
-        if (item?.enabled) {
-          setBackground(item.rgb);
-        }
-        return next;
-      });
+      const next = previousCycleIndex(
+        cycle.items,
+        cycleIndexRef.current,
+        loop,
+      );
+      applyCycleIndex(next);
     },
-    [cycle.items, cycle.loop],
+    [applyCycleIndex, cycle.items, cycle.loop],
+  );
+
+  /** Setup arrows: walk enabled cycle colours; preview colour follows. */
+  const stepColourCycle = useCallback(
+    (direction: "next" | "previous") => {
+      const enabledIndexes = cycle.items
+        .map((item, index) => (item.enabled ? index : -1))
+        .filter((index) => index >= 0);
+      if (enabledIndexes.length === 0) return;
+
+      if (previewCycleActive) {
+        setPreviewCycleActive(false);
+        setStatusMessage(null);
+      }
+
+      let position = enabledIndexes.indexOf(cycleIndexRef.current);
+      if (position < 0) {
+        const match = findCycleIndexForColour(cycle.items, background);
+        position = match >= 0 ? enabledIndexes.indexOf(match) : 0;
+        if (position < 0) position = 0;
+      }
+
+      const nextPosition =
+        direction === "next"
+          ? (position + 1) % enabledIndexes.length
+          : (position - 1 + enabledIndexes.length) % enabledIndexes.length;
+
+      applyCycleIndex(enabledIndexes[nextPosition]);
+    },
+    [applyCycleIndex, background, cycle.items, previewCycleActive],
   );
 
   const exitTestMode = useCallback(async () => {
@@ -401,6 +440,7 @@ export function ColourScreenPixelTester() {
   }, [advanceColour, cycle.paused, delayMs, reducedMotion, testActive]);
 
   // Preview-window colour cycle (Test button) — not fullscreen.
+  // Manual only (delayMs === null) never auto-advances; use the arrows instead.
   useEffect(() => {
     if (previewCycleTimerRef.current) {
       window.clearInterval(previewCycleTimerRef.current);
@@ -412,31 +452,35 @@ export function ColourScreenPixelTester() {
       }
       return;
     }
+    if (delayMs === null) {
+      setPreviewCycleActive(false);
+      setStatusMessage(null);
+      return;
+    }
 
-    // Manual delay still needs a step interval so the preview can run.
-    let intervalMs = delayMs ?? 1000;
+    let intervalMs = delayMs;
     if (reducedMotion) {
       intervalMs = Math.max(intervalMs, 2000);
     }
     intervalMs = Math.max(intervalMs, CYCLE_LIMITS.minDelaySeconds * 1000);
 
     previewCycleTimerRef.current = window.setInterval(() => {
-      setCycleIndex((current) => {
-        const next = nextCycleIndex(
-          cycle.items,
-          current,
-          cycle.order,
-          cycle.loop,
-        );
-        const item = cycle.items[next];
-        if (item?.enabled) {
-          setBackground(item.rgb);
-        }
-        if (!cycle.loop && next === current) {
-          window.setTimeout(() => setPreviewCycleActive(false), 0);
-        }
-        return next;
-      });
+      const current = cycleIndexRef.current;
+      const next = nextCycleIndex(
+        cycle.items,
+        current,
+        cycle.order,
+        cycle.loop,
+      );
+      const item = cycle.items[next];
+      if (item?.enabled) {
+        setBackground(item.rgb);
+        setCycleIndex(next);
+        cycleIndexRef.current = next;
+      }
+      if (!cycle.loop && next === current) {
+        setPreviewCycleActive(false);
+      }
     }, intervalMs);
 
     return () => {
@@ -454,6 +498,37 @@ export function ColourScreenPixelTester() {
     reducedMotion,
     testActive,
   ]);
+
+  function scrollPreviewIntoView() {
+    window.requestAnimationFrame(() => {
+      const preview = document.getElementById("screen-colour-preview");
+      if (!preview) return;
+
+      const rect = preview.getBoundingClientRect();
+      const marginTop =
+        Number.parseFloat(getComputedStyle(preview).scrollMarginTop) || 0;
+      const bottomGap = 16;
+      const visibleTop = marginTop;
+      const visibleBottom = window.innerHeight - bottomGap;
+      const availableHeight = visibleBottom - visibleTop;
+
+      // Scroll far enough that the whole preview fits when it can; otherwise
+      // pin its top under the header so the colour window is on screen.
+      let delta = 0;
+      if (rect.height <= availableHeight) {
+        if (rect.top < visibleTop) {
+          delta = rect.top - visibleTop;
+        } else if (rect.bottom > visibleBottom) {
+          delta = rect.bottom - visibleBottom;
+        }
+      } else if (rect.top !== visibleTop) {
+        delta = rect.top - visibleTop;
+      }
+
+      if (Math.abs(delta) < 1) return;
+      window.scrollBy({ top: delta, behavior: "smooth" });
+    });
+  }
 
   function togglePreviewCycle() {
     if (previewCycleActive) {
@@ -477,12 +552,19 @@ export function ColourScreenPixelTester() {
         setBackground(cycle.items[firstEnabled].rgb);
       }
     }
+
+    scrollPreviewIntoView();
+
+    // Manual only: show the current colour; arrows step the colour cycle list.
+    if (delayMs === null) {
+      setStatusMessage(
+        "Manual mode — use the arrows to step through the colour cycle.",
+      );
+      return;
+    }
+
     setPreviewCycleActive(true);
-    setStatusMessage(
-      delayMs === null
-        ? "Preview cycle running (1 second steps — choose a Delay for a different speed)."
-        : "Preview cycle running in the screen colour preview.",
-    );
+    setStatusMessage("Preview cycle running in the screen colour preview.");
   }
 
   // Exit when leaving browser fullscreen via Esc / browser UI.
@@ -822,18 +904,17 @@ export function ColourScreenPixelTester() {
           </div>
 
           <div className="grid gap-5 lg:grid-cols-2 lg:items-start lg:gap-6">
-            <div className="min-w-0 space-y-6">
-              <div className="space-y-3" data-colour-values-panel>
-                <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">
-                  Colour values
-                </p>
-                <ColourFormatControls
-                  colour={background}
-                  onChange={setBackground}
-                />
-              </div>
+            <div className="order-1 min-w-0 space-y-3" data-colour-values-panel>
+              <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">
+                Colour values
+              </p>
+              <ColourFormatControls
+                colour={background}
+                onChange={setBackground}
+              />
+            </div>
 
-              <div className="space-y-4 rounded-2xl border border-border bg-background/60 p-4">
+            <div className="order-3 min-w-0 space-y-4 rounded-2xl border border-border bg-background/60 p-4">
                 <div>
                   <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">
                     Colour cycle
@@ -858,9 +939,9 @@ export function ColourScreenPixelTester() {
                   <FriendlyError message="Custom delays under 1 second can feel harsh. Consider a slower interval." />
                 ) : null}
 
-                <div className="grid gap-4 sm:grid-cols-[auto_1fr] sm:items-start">
-                  <div className="flex w-[13.25rem] max-w-full flex-col gap-3">
-                  <ul className="list-none space-y-1.5 p-0">
+                <div className="grid gap-4 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start lg:gap-x-6">
+                  <div className="mx-auto flex w-[13.25rem] max-w-full flex-col items-center gap-3 lg:mx-0 lg:items-stretch">
+                  <ul className="w-full list-none space-y-1.5 p-0">
                     {cycle.items.map((item, index) => {
                       const isCurrent = index === cycleIndex;
                       return (
@@ -1016,27 +1097,16 @@ export function ColourScreenPixelTester() {
                         </div>
                   </div>
 
-                  <div className="flex w-full flex-col items-center gap-6">
-                    <Button
-                      type="button"
-                      variant={previewCycleActive ? "secondary" : "primary"}
-                      size="sm"
-                      disabled={enabledCount === 0 && !previewCycleActive}
-                      onClick={togglePreviewCycle}
-                      className="!h-11 !w-auto !min-w-[9.5rem] !px-4"
-                    >
-                      {previewCycleActive ? "Stop" : "Test in preview window"}
-                    </Button>
-
-                    <div className="flex items-center justify-center gap-3">
+                  <div className="flex min-w-0 w-full flex-col items-center gap-6">
+                    <div className="flex w-auto max-w-full items-center justify-center gap-1.5">
                       <button
                         type="button"
-                        aria-label="Previous colour"
-                        title="Previous colour"
+                        aria-label="Previous colour in cycle"
+                        title="Previous colour in cycle"
                         disabled={enabledCount === 0}
-                        onClick={() => previousColour({ ignoreLoop: true })}
+                        onClick={() => stepColourCycle("previous")}
                         className={cn(
-                          "inline-flex h-14 w-14 items-center justify-center rounded-md border border-border bg-surface text-foreground shadow-soft-sm",
+                          "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-foreground shadow-soft-sm",
                           "transition-[transform,border-color,color,opacity] duration-200",
                           "hover:-translate-y-px hover:border-accent/40 hover:text-accent",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -1045,14 +1115,24 @@ export function ColourScreenPixelTester() {
                       >
                         <ChevronLeftIcon />
                       </button>
+                      <Button
+                        type="button"
+                        variant={previewCycleActive ? "secondary" : "primary"}
+                        size="sm"
+                        disabled={enabledCount === 0 && !previewCycleActive}
+                        onClick={togglePreviewCycle}
+                        className="!h-9 !w-auto !min-w-[3.75rem] shrink-0 !px-3 text-sm"
+                      >
+                        {previewCycleActive ? "Stop" : "Test"}
+                      </Button>
                       <button
                         type="button"
-                        aria-label="Next colour"
-                        title="Next colour"
+                        aria-label="Next colour in cycle"
+                        title="Next colour in cycle"
                         disabled={enabledCount === 0}
-                        onClick={() => advanceColour({ ignoreLoop: true })}
+                        onClick={() => stepColourCycle("next")}
                         className={cn(
-                          "inline-flex h-14 w-14 items-center justify-center rounded-md border border-border bg-surface text-foreground shadow-soft-sm",
+                          "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-foreground shadow-soft-sm",
                           "transition-[transform,border-color,color,opacity] duration-200",
                           "hover:-translate-y-px hover:border-accent/40 hover:text-accent",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -1083,7 +1163,7 @@ export function ColourScreenPixelTester() {
                           }
                           className="!w-auto min-w-0 flex-1"
                         >
-                          <option value="manual">Manual only</option>
+                          <option value="manual">Manual</option>
                           <option value="1">1 sec.</option>
                           <option value="2">2 sec.</option>
                           <option value="3">3 sec.</option>
@@ -1162,35 +1242,58 @@ export function ColourScreenPixelTester() {
                     </label>
                   </div>
                 </div>
-              </div>
             </div>
 
-            <div className="space-y-4 lg:sticky lg:top-24">
+            <div className="order-2 space-y-4 lg:sticky lg:top-24 lg:row-span-2">
               <div className="space-y-3">
-                <CursorMarkerPreview
-                  background={background}
-                  marker={marker}
-                  title="Screen colour preview"
-                  helperText={`Move over the preview to try the cursor marker on ${formatHex(background)}.`}
-                  boxClassName="min-h-[22rem] sm:min-h-[28rem]"
-                  onDoubleClick={() => void enterTestMode()}
-                  action={
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() =>
-                        addColourToCycle(background, formatHex(background))
-                      }
-                      className="!min-h-9 !border-border/30 !bg-surface/30 px-3 py-1.5 text-sm !text-[#b3b3b3] hover:!border-border/80 hover:!bg-surface/80 hover:!text-accent"
-                    >
-                      Add to cycle
-                    </Button>
-                  }
-                />
+                <div
+                  id="screen-colour-preview"
+                  className="scroll-mt-[calc(var(--site-header-height)+0.75rem)] sm:scroll-mt-[calc(var(--site-header-height-sm)+0.75rem)]"
+                >
+                  <CursorMarkerPreview
+                    background={background}
+                    marker={marker}
+                    title="Screen colour preview"
+                    helperText={`Move over the preview to try the cursor marker on ${formatHex(background)}.`}
+                    boxClassName="min-h-[22rem] sm:min-h-[28rem]"
+                    onDoubleClick={() => void enterTestMode()}
+                    onPrevious={() => stepColourCycle("previous")}
+                    onNext={() => stepColourCycle("next")}
+                    stepDisabled={enabledCount === 0}
+                    topBanner={
+                      <p className="rounded-md bg-black/45 px-3 py-1.5 text-center text-sm font-medium text-white shadow-soft-sm">
+                        Colour cycle delay: {cycleDelayLabel}
+                      </p>
+                    }
+                    action={
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          addColourToCycle(background, formatHex(background))
+                        }
+                        className="!min-h-9 !border-border/30 !bg-surface/30 px-3 py-1.5 text-sm !text-white hover:!border-border/80 hover:!bg-surface/80 hover:!text-white"
+                      >
+                        Add to cycle
+                      </Button>
+                    }
+                  />
+                </div>
                 <ColourPickerAndHex
                   colour={background}
-                  onChange={setBackground}
+                  onPickerOpen={() => {
+                    if (!previewCycleActive) return;
+                    setPreviewCycleActive(false);
+                    setStatusMessage(null);
+                  }}
+                  onChange={(colour) => {
+                    if (previewCycleActive) {
+                      setPreviewCycleActive(false);
+                      setStatusMessage(null);
+                    }
+                    setBackground(colour);
+                  }}
                 />
                 <div
                   role="separator"
@@ -1347,7 +1450,7 @@ export function ColourScreenPixelTester() {
                   the sequence afterward.
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                 {PIXEL_WORKFLOWS.map((workflow) => {
                   const isSelected = selectedWorkflowId === workflow.id;
                   const previewColourIds = [
@@ -1363,7 +1466,7 @@ export function ColourScreenPixelTester() {
                       type="button"
                       aria-pressed={isSelected}
                       className={cn(
-                        "rounded-2xl border p-4 text-left transition-colors",
+                        "min-w-0 rounded-2xl border p-3 text-left transition-colors sm:p-4",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         isSelected
                           ? "border-accent bg-accent-soft/50 ring-2 ring-accent/30"
@@ -1386,13 +1489,13 @@ export function ColourScreenPixelTester() {
                       </div>
                       <p
                         className={cn(
-                          "font-display text-base font-semibold",
+                          "font-display text-sm font-semibold sm:text-base",
                           isSelected ? "text-accent" : "text-foreground",
                         )}
                       >
                         {workflow.label}
                       </p>
-                      <p className="mt-1.5 text-[0.9375rem] leading-relaxed text-muted sm:text-base">
+                      <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-muted sm:text-base">
                         {workflow.description}
                       </p>
                     </button>

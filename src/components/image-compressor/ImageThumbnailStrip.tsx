@@ -119,12 +119,16 @@ export function ImageThumbnailStrip({
     : THUMB_SPARKLE_STAGGER_MS;
 
   return (
-    <section aria-labelledby="batch-strip-heading" className="space-y-3">
+    <section
+      id="batch-images"
+      aria-labelledby="batch-strip-heading"
+      className="scroll-mt-24 space-y-3"
+    >
       <h2
         id="batch-strip-heading"
         className="font-display text-lg font-semibold tracking-tight text-foreground sm:text-xl"
       >
-        Batch ({items.length})
+        Batch images ({items.length})
       </h2>
 
       <ul className="grid list-none grid-cols-3 gap-2.5 p-0 sm:gap-3">

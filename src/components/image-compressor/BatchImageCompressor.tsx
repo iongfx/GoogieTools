@@ -52,6 +52,11 @@ import {
   kindSupportsTransparency,
 } from "@/lib/image-formats";
 import {
+  canSaveImagesToFolder,
+  downloadImagesIndividually,
+  saveImagesToFolder,
+} from "@/lib/image-batch-download";
+import {
   decodeImageFile,
   estimateImageFile,
   processImageFile,
@@ -178,9 +183,25 @@ function updateItemCropsForSettings(
 /**
  * Free Batch Image Compressor — local resize, crop, convert, and compress.
  */
+function isUploadErrorMessage(message: string): boolean {
+  return (
+    message.includes("could not") ||
+    message.includes("not supported") ||
+    message.includes("larger") ||
+    message.includes("limit")
+  );
+}
+
+function isImagesAddedMessage(message: string): boolean {
+  return (
+    message.includes("image added") || message.includes("images added")
+  );
+}
+
 export function BatchImageCompressor() {
   const progressId = useId();
   const summaryId = useId();
+  const batchImagesId = "batch-images";
 
   const [items, setItems] = useState<BatchImageItem[]>([]);
   const [settings, setSettings] = useState<ImageCompressorSettings>(
@@ -194,6 +215,7 @@ export function BatchImageCompressor() {
     total: number;
   } | null>(null);
   const [zipStatus, setZipStatus] = useState<string | null>(null);
+  const [folderSaveSupported, setFolderSaveSupported] = useState(false);
   const [webpSupported, setWebpSupported] = useState<boolean | null>(null);
   const [batchComplete, setBatchComplete] = useState(false);
   const [estimateUpdating, setEstimateUpdating] = useState(false);
@@ -272,6 +294,10 @@ export function BatchImageCompressor() {
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    setFolderSaveSupported(canSaveImagesToFolder());
   }, []);
 
   useEffect(() => {
@@ -680,6 +706,11 @@ export function BatchImageCompressor() {
     setProgress(null);
     setZipStatus(null);
     setBatchComplete(false);
+
+    // Wait for the empty state to render, then return to the top of the page.
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    });
   }
 
   async function handleDownload(id: string) {
@@ -813,13 +844,17 @@ export function BatchImageCompressor() {
   }
 
   function goPrevious() {
-    if (selectedIndex <= 0) return;
-    selectImage(items[selectedIndex - 1].id);
+    if (!items.length) return;
+    const nextIndex =
+      selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1;
+    selectImage(items[nextIndex].id);
   }
 
   function goNext() {
-    if (selectedIndex >= items.length - 1) return;
-    selectImage(items[selectedIndex + 1].id);
+    if (!items.length) return;
+    const nextIndex =
+      selectedIndex >= items.length - 1 ? 0 : selectedIndex + 1;
+    selectImage(items[nextIndex].id);
   }
 
   /** Scroll the currently edited thumbnail into the middle of the viewport. */
@@ -1094,11 +1129,85 @@ export function BatchImageCompressor() {
     }
   }
 
-  async function handleZipDownload() {
+  function getReadyDownloadFiles() {
     const ready = items.filter(
       (item) => item.status === "complete" && item.output,
     );
-    if (!ready.length) return;
+    const names = uniquifyFilenames(ready.map((item) => item.output!.filename));
+    return ready.map((item, index) => ({
+      filename: names[index],
+      blob: item.output!.blob,
+    }));
+  }
+
+  async function handleSaveToFolder() {
+    const files = getReadyDownloadFiles();
+    if (!files.length) return;
+
+    setZipStatus(
+      files.length === 1
+        ? "Choose a folder for 1 image…"
+        : `Choose a folder for ${files.length} images…`,
+    );
+    shineZipDownloadSparkles();
+    try {
+      await waitForSparklePair();
+      const result = await saveImagesToFolder(files);
+      if (result === "cancelled") {
+        setZipStatus(null);
+        return;
+      }
+      if (result === "unsupported") {
+        setZipStatus(null);
+        setUploadMessage(
+          "Saving to a folder isn’t supported in this browser. Use Download all individually or ZIP instead.",
+        );
+        return;
+      }
+      setZipStatus(
+        files.length === 1
+          ? "Saved 1 image to your folder"
+          : `Saved ${files.length} images to your folder`,
+      );
+      window.setTimeout(() => setZipStatus(null), 2500);
+    } catch {
+      setZipStatus(null);
+      setUploadMessage(
+        "Could not save images to that folder. Try Download all individually or ZIP instead.",
+      );
+    }
+  }
+
+  async function handleDownloadAllIndividually() {
+    const files = getReadyDownloadFiles();
+    if (!files.length) return;
+
+    setZipStatus(
+      files.length === 1
+        ? "Starting download…"
+        : `Starting ${files.length} downloads…`,
+    );
+    shineZipDownloadSparkles();
+    try {
+      await waitForSparklePair();
+      await downloadImagesIndividually(files);
+      setZipStatus(
+        files.length === 1
+          ? "Download started"
+          : `${files.length} downloads started`,
+      );
+      window.setTimeout(() => setZipStatus(null), 2500);
+    } catch {
+      setZipStatus(null);
+      setUploadMessage(
+        "Could not download every image in this browser. Try the ZIP download instead.",
+      );
+    }
+  }
+
+  async function handleZipDownload() {
+    const files = getReadyDownloadFiles();
+    if (!files.length) return;
 
     setZipStatus("Preparing ZIP…");
     shineZipDownloadSparkles();
@@ -1106,10 +1215,9 @@ export function BatchImageCompressor() {
       // Build the ZIP while sparkles play; only start the download after both shine.
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
-      const names = uniquifyFilenames(ready.map((item) => item.output!.filename));
 
-      ready.forEach((item, index) => {
-        zip.file(names[index], item.output!.blob);
+      files.forEach((file) => {
+        zip.file(file.filename, file.blob);
       });
 
       const [blob] = await Promise.all([
@@ -1155,11 +1263,8 @@ export function BatchImageCompressor() {
               <p
                 className={cn(
                   "text-sm",
-                  uploadMessage.includes("could not") ||
-                    uploadMessage.includes("not supported") ||
-                    uploadMessage.includes("larger") ||
-                    uploadMessage.includes("limit")
-                    ? "text-error"
+                  isUploadErrorMessage(uploadMessage)
+                    ? "font-semibold text-error"
                     : "text-muted",
                 )}
                 role="status"
@@ -1189,21 +1294,38 @@ export function BatchImageCompressor() {
               />
 
               {uploadMessage ? (
-                <p
-                  className={cn(
-                    "text-sm",
-                    uploadMessage.includes("could not") ||
-                      uploadMessage.includes("not supported") ||
-                      uploadMessage.includes("larger") ||
-                      uploadMessage.includes("limit")
-                      ? "text-error"
-                      : "text-muted",
-                  )}
-                  role="status"
-                  aria-live="polite"
-                >
-                  {uploadMessage}
-                </p>
+                <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-center">
+                  <p
+                    className={cn(
+                      "text-sm",
+                      isImagesAddedMessage(uploadMessage) ||
+                        isUploadErrorMessage(uploadMessage)
+                        ? "font-bold text-error"
+                        : "text-muted",
+                    )}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {uploadMessage}
+                  </p>
+                  {isImagesAddedMessage(uploadMessage) ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        document
+                          .getElementById(batchImagesId)
+                          ?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start",
+                          });
+                      }}
+                    >
+                      Go to images
+                    </Button>
+                  ) : null}
+                </div>
               ) : null}
 
               <section aria-labelledby="settings-heading" className="space-y-5">
@@ -1240,51 +1362,8 @@ export function BatchImageCompressor() {
                   />
                 ) : null}
 
-                <div className="flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
-                  <Button
-                    type="button"
-                    disabled={!canProcess}
-                    onClick={() => void handleProcess()}
-                  >
-                    {processLabel}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={processing || items.length === 0}
-                    onClick={handleClearBatch}
-                  >
-                    Clear batch
-                  </Button>
-                </div>
-
                 {!settingsCheck.ok ? (
                   <FriendlyError message={settingsCheck.message} />
-                ) : null}
-
-                {processing && progress ? (
-                  <div
-                    id={progressId}
-                    role="status"
-                    aria-live="polite"
-                    aria-atomic="true"
-                    className="rounded-2xl border border-border bg-background/80 px-4 py-3"
-                  >
-                    <p className="font-medium text-foreground">
-                      Processing {progress.current} of {progress.total} images
-                    </p>
-                    <div
-                      className="mt-3 h-2 overflow-hidden rounded-full bg-border"
-                      aria-hidden="true"
-                    >
-                      <div
-                        className="h-full rounded-full bg-accent transition-[width] duration-300"
-                        style={{
-                          width: `${Math.round((progress.current / Math.max(progress.total, 1)) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
                 ) : null}
               </section>
             </div>
@@ -1326,11 +1405,37 @@ export function BatchImageCompressor() {
                   }}
                   onResetAllCrops={handleResetAllCrops}
                   onApplyCropToAll={handleApplyCropToAll}
+                  processLabel={processLabel}
+                  canProcess={canProcess}
+                  onProcess={() => void handleProcess()}
+                  onClearBatch={handleClearBatch}
+                  clearDisabled={processing || items.length === 0}
                 />
               ) : (
-                <p className="rounded-2xl border border-border px-4 py-8 text-center text-sm text-muted">
-                  Select a valid image to edit its crop.
-                </p>
+                <div className="space-y-4">
+                  <p className="rounded-2xl border border-border px-4 py-8 text-center text-sm text-muted">
+                    Select a valid image to edit its crop.
+                  </p>
+                  <div className="flex flex-row flex-wrap items-center justify-center gap-3">
+                    <Button
+                      type="button"
+                      disabled={!canProcess}
+                      onClick={() => void handleProcess()}
+                      className="min-w-0 flex-1 sm:flex-none"
+                    >
+                      {processLabel}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={processing || items.length === 0}
+                      onClick={handleClearBatch}
+                      className="min-w-0 flex-1 sm:flex-none"
+                    >
+                      Clear batch
+                    </Button>
+                  </div>
+                </div>
               )}
 
               <ImageThumbnailStrip
@@ -1351,6 +1456,52 @@ export function BatchImageCompressor() {
                 onProcess={(id) => void handleProcessOne(id)}
                 onRename={handleRename}
               />
+
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex w-full flex-row flex-wrap items-center justify-center gap-3">
+                  <Button
+                    type="button"
+                    disabled={!canProcess}
+                    onClick={() => void handleProcess()}
+                    className="min-w-0 flex-1 sm:flex-none"
+                  >
+                    {processLabel}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={processing || items.length === 0}
+                    onClick={handleClearBatch}
+                    className="min-w-0 flex-1 sm:flex-none"
+                  >
+                    Clear batch
+                  </Button>
+                </div>
+                {processing && progress ? (
+                  <div
+                    id={progressId}
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    className="w-full max-w-md rounded-2xl border border-border bg-background/80 px-4 py-3"
+                  >
+                    <p className="font-medium text-foreground">
+                      Processing {progress.current} of {progress.total} images
+                    </p>
+                    <div
+                      className="mt-3 h-2 overflow-hidden rounded-full bg-border"
+                      aria-hidden="true"
+                    >
+                      <div
+                        className="h-full rounded-full bg-accent transition-[width] duration-300"
+                        style={{
+                          width: `${Math.round((progress.current / Math.max(progress.total, 1)) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         )}
@@ -1369,8 +1520,10 @@ export function BatchImageCompressor() {
               }
               description={
                 resultsArePartial
-                  ? `${completedItems.length} processed image${completedItems.length === 1 ? "" : "s"} can still be downloaded. ${needsReprocessCount} image${needsReprocessCount === 1 ? "" : "s"} changed after processing — process again to include ${needsReprocessCount === 1 ? "it" : "them"} in a new ZIP.`
-                  : "Download them individually or save the full batch as a ZIP."
+                  ? `${completedItems.length} processed image${completedItems.length === 1 ? "" : "s"} can still be downloaded. ${needsReprocessCount} image${needsReprocessCount === 1 ? "" : "s"} changed after processing — process again to refresh ${needsReprocessCount === 1 ? "it" : "them"}.`
+                  : folderSaveSupported
+                    ? "Save them into a folder, download each file, or get a ZIP."
+                    : "Download each file individually, or get a ZIP of the full batch."
               }
             />
 
@@ -1392,15 +1545,37 @@ export function BatchImageCompressor() {
             ) : null}
 
             <div className="mt-6 border-t border-border pt-5">
-              <div className="flex justify-center">
+              <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
+                {folderSaveSupported ? (
+                  <Button
+                    type="button"
+                    disabled={completedItems.length === 0 || zipStatus != null}
+                    onClick={() => void handleSaveToFolder()}
+                  >
+                    {resultsArePartial
+                      ? `Save ${completedItems.length} to folder`
+                      : "Save all to folder"}
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
+                  variant={folderSaveSupported ? "secondary" : "primary"}
+                  disabled={completedItems.length === 0 || zipStatus != null}
+                  onClick={() => void handleDownloadAllIndividually()}
+                >
+                  {resultsArePartial
+                    ? `Download ${completedItems.length} individually`
+                    : "Download all individually"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
                   disabled={completedItems.length === 0 || zipStatus != null}
                   onClick={() => void handleZipDownload()}
                 >
                   {resultsArePartial
-                    ? `Download ${completedItems.length} processed image${completedItems.length === 1 ? "" : "s"} as ZIP`
-                    : "Download all images as ZIP"}
+                    ? `Download ${completedItems.length} as ZIP`
+                    : "Download all as ZIP"}
                 </Button>
               </div>
               {zipStatus ? (

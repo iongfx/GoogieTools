@@ -53,15 +53,33 @@ export function FullscreenTestMode({
   const rootRef = useRef<HTMLDivElement>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
   const bottomBarRef = useRef<HTMLDivElement>(null);
+  const hideControlsTimerRef = useRef<number | null>(null);
+  const touchActiveRef = useRef(false);
   const [pointer, setPointer] = useState({ x: 0, y: 0, visible: false });
   const [showHelp, setShowHelp] = useState(false);
   const [showIntroControls, setShowIntroControls] = useState(true);
   const [showTopControls, setShowTopControls] = useState(false);
   const [showBottomControls, setShowBottomControls] = useState(false);
+  const [isCoarsePointer, setIsCoarsePointer] = useState(false);
+
+  const TOUCH_CONTROLS_HOLD_MS = 3500;
+
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: coarse)");
+    const sync = () => setIsCoarsePointer(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   // Show all buttons for 1 second when entering fullscreen, then hide.
   useEffect(() => {
     if (!active) return;
+    touchActiveRef.current = false;
+    if (hideControlsTimerRef.current) {
+      window.clearTimeout(hideControlsTimerRef.current);
+      hideControlsTimerRef.current = null;
+    }
     setShowIntroControls(true);
     setShowTopControls(false);
     setShowBottomControls(false);
@@ -74,34 +92,107 @@ export function FullscreenTestMode({
   useEffect(() => {
     if (!active) return;
 
-    function onPointerMove(event: PointerEvent) {
-      setPointer({ x: event.clientX, y: event.clientY, visible: true });
+    function clearHideTimer() {
+      if (hideControlsTimerRef.current) {
+        window.clearTimeout(hideControlsTimerRef.current);
+        hideControlsTimerRef.current = null;
+      }
+    }
 
+    function showTouchControls() {
+      setShowIntroControls(false);
+      setShowTopControls(true);
+      setShowBottomControls(true);
+    }
+
+    function scheduleHideTouchControls() {
+      clearHideTimer();
+      hideControlsTimerRef.current = window.setTimeout(() => {
+        if (touchActiveRef.current) return;
+        setShowTopControls(false);
+        setShowBottomControls(false);
+        hideControlsTimerRef.current = null;
+      }, TOUCH_CONTROLS_HOLD_MS);
+    }
+
+    function isTouchLike(event: PointerEvent) {
+      return event.pointerType === "touch" || isCoarsePointer;
+    }
+
+    function updateEdgeControls(clientY: number) {
       const topRect = topBarRef.current?.getBoundingClientRect();
       const bottomRect = bottomBarRef.current?.getBoundingClientRect();
       const topLimit = (topRect?.bottom ?? 64) + 15;
       const bottomLimit = (bottomRect?.top ?? window.innerHeight - 64) - 15;
+      setShowTopControls(clientY <= topLimit);
+      setShowBottomControls(clientY >= bottomLimit);
+    }
 
-      setShowTopControls(event.clientY <= topLimit);
-      setShowBottomControls(event.clientY >= bottomLimit);
+    function onPointerDown(event: PointerEvent) {
+      setPointer({ x: event.clientX, y: event.clientY, visible: true });
+
+      if (isTouchLike(event)) {
+        touchActiveRef.current = true;
+        clearHideTimer();
+        showTouchControls();
+        return;
+      }
+
+      updateEdgeControls(event.clientY);
+    }
+
+    function onPointerMove(event: PointerEvent) {
+      setPointer({ x: event.clientX, y: event.clientY, visible: true });
+
+      if (isTouchLike(event) || touchActiveRef.current) {
+        if (touchActiveRef.current) {
+          clearHideTimer();
+          showTouchControls();
+        }
+        return;
+      }
+
+      updateEdgeControls(event.clientY);
+    }
+
+    function onPointerUp(event: PointerEvent) {
+      if (!isTouchLike(event) && !touchActiveRef.current) return;
+      touchActiveRef.current = false;
+      showTouchControls();
+      scheduleHideTouchControls();
+    }
+
+    function onPointerCancel() {
+      if (!touchActiveRef.current) return;
+      touchActiveRef.current = false;
+      showTouchControls();
+      scheduleHideTouchControls();
     }
 
     function onPointerLeave() {
+      if (touchActiveRef.current) return;
       setPointer((prev) => ({ ...prev, visible: false }));
-      setShowTopControls(false);
-      setShowBottomControls(false);
+      if (!isCoarsePointer) {
+        setShowTopControls(false);
+        setShowBottomControls(false);
+      }
     }
 
     window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerdown", onPointerMove);
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
     document.addEventListener("pointerleave", onPointerLeave);
 
     return () => {
+      clearHideTimer();
       window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerdown", onPointerMove);
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
       document.removeEventListener("pointerleave", onPointerLeave);
     };
-  }, [active]);
+  }, [active, isCoarsePointer]);
 
   useEffect(() => {
     if (!active) return;
@@ -125,7 +216,8 @@ export function FullscreenTestMode({
   const controlsVisible = topVisible || bottomVisible || showHelp;
   // Show the system cursor whenever on-screen controls are visible.
   const hideCursor = marker.hideSystemCursor && !controlsVisible;
-  const showColourCodes = showBottomControls;
+  // Show colour info whenever the bottom bar is visible (incl. touch / intro).
+  const showColourCodes = bottomVisible;
   const rgb = formatRgbChannels(background);
   const hex = formatHex(background);
 
