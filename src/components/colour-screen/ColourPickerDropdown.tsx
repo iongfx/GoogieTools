@@ -123,7 +123,7 @@ export function ColourPickerDropdown({
       const spaceBelow = window.innerHeight - trigger.bottom - VIEWPORT_GAP_PX;
       const spaceAbove = trigger.top - VIEWPORT_GAP_PX;
 
-      // Prefer opening over the preview (above) so the left Colour values stay clear.
+      // Prefer opening over the preview (above) when there is room.
       const openAbove =
         spaceAbove >= panelHeight ||
         (spaceAbove >= spaceBelow && spaceAbove >= panelHeight * 0.6);
@@ -132,31 +132,8 @@ export function ColourPickerDropdown({
         ? trigger.top - panelHeight - VIEWPORT_GAP_PX
         : trigger.bottom + VIEWPORT_GAP_PX;
 
-      // Keep the panel over the right column when opened from the background swatch.
-      // When opened from inside Colour values (marker colour), don't force that shift —
-      // just keep the full panel on screen near the colour box.
-      left = trigger.left;
-      const valuesPanel = document.querySelector("[data-colour-values-panel]");
-      const openedFromValuesPanel =
-        Boolean(valuesPanel) && valuesPanel!.contains(root);
-
-      if (!openedFromValuesPanel) {
-        left = trigger.right - panelWidth;
-        if (valuesPanel) {
-          const valuesRight =
-            valuesPanel.getBoundingClientRect().right + VIEWPORT_GAP_PX;
-          left = Math.max(left, valuesRight);
-        }
-      }
-
-      // Prefer opening below when the trigger is in the left column (more room).
-      if (openedFromValuesPanel) {
-        const openBelow =
-          spaceBelow >= panelHeight || spaceBelow >= spaceAbove;
-        top = openBelow
-          ? trigger.bottom + VIEWPORT_GAP_PX
-          : trigger.top - panelHeight - VIEWPORT_GAP_PX;
-      }
+      // Align the panel with the colour swatch (right edge).
+      left = trigger.right - panelWidth;
     }
 
     // Keep the full panel on screen when possible.

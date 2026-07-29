@@ -65,6 +65,27 @@ const STRENGTH_BAR_BRIGHT_GREEN = "bg-[#22c55e]";
 
 const SPARKLE_STAGGER_MS = 420;
 
+function CopyIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
 type SparkleLayout = {
   /** Vertical position on the password box (0 = top, 100 = bottom). */
   rightOffsetPercent: number;
@@ -489,7 +510,7 @@ export function PasswordGenerator() {
                     <div
                       id={passwordId}
                       className={cn(
-                        "min-w-0 break-all rounded-xl border border-border bg-background px-5 py-3.5 sm:px-6",
+                        "relative min-w-0 break-all rounded-xl border border-border bg-background py-3.5 pl-5 pr-12 sm:pl-6 sm:pr-14",
                         "font-mono text-[1.0625rem] leading-relaxed tracking-wide text-foreground sm:text-lg",
                         "select-all",
                       )}
@@ -506,6 +527,19 @@ export function PasswordGenerator() {
                           </span>
                         </p>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => void handleCopy()}
+                        aria-label="Copy password"
+                        title="Copy password"
+                        className={cn(
+                          "absolute right-1.5 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted transition-colors duration-200",
+                          "hover:bg-surface hover:text-accent",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        )}
+                      >
+                        <CopyIcon />
+                      </button>
                     </div>
                   </div>
 

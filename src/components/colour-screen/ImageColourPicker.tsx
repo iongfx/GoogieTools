@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { GoogieEmptyStateIcon } from "@/components/brand/GoogieEmptyStateIcon";
 import { ColourInspector } from "@/components/colour-screen/ColourInspector";
+import { PREVIEW_OVERLAY_BUTTON_CLASS } from "@/components/colour-screen/previewOverlayChrome";
 import { Button } from "@/components/ui/Button";
 import { FriendlyError } from "@/components/ui/FriendlyError";
 import { Input } from "@/components/ui/Input";
@@ -963,38 +964,30 @@ export function ImageColourPicker({
                     className="pointer-events-auto flex gap-2"
                     onPointerDown={(event) => event.stopPropagation()}
                   >
-                    <Button
+                    <button
                       type="button"
-                      variant="secondary"
-                      size="sm"
+                      disabled={!sample}
                       aria-disabled={!sample}
                       onClick={() => {
                         if (!sample) return;
                         onAddToCycle(sample.rgb);
                       }}
-                      className={cn(
-                        "!min-h-9 !border-border/30 !bg-surface/30 px-3 py-1.5 text-sm !text-[#b3b3b3] hover:!border-border/80 hover:!bg-surface/80 hover:!text-accent",
-                        !sample && "!opacity-40",
-                      )}
+                      className={PREVIEW_OVERLAY_BUTTON_CLASS}
                     >
                       Add to cycle
-                    </Button>
-                    <Button
+                    </button>
+                    <button
                       type="button"
-                      variant="secondary"
-                      size="sm"
+                      disabled={!sample}
                       aria-disabled={!sample}
                       onClick={() => {
                         if (!sample) return;
                         onUseAsMarker(sample.rgb);
                       }}
-                      className={cn(
-                        "!min-h-9 !border-border/30 !bg-surface/30 px-3 py-1.5 text-sm !text-[#b3b3b3] hover:!border-border/80 hover:!bg-surface/80 hover:!text-accent",
-                        !sample && "!opacity-40",
-                      )}
+                      className={PREVIEW_OVERLAY_BUTTON_CLASS}
                     >
                       Use as marker colour
-                    </Button>
+                    </button>
                   </div>
                 </div>
               </div>

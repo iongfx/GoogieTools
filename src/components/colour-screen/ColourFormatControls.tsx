@@ -126,7 +126,7 @@ function MiniField({
 }
 
 /**
- * Colour picker dropdown + HEX field, kept in sync with a canonical RGB colour.
+ * Colour picker dropdown kept in sync with a canonical RGB colour.
  */
 export function ColourPickerAndHex({
   colour,
@@ -141,16 +141,11 @@ export function ColourPickerAndHex({
   onPickerOpen?: () => void;
 }) {
   const baseId = useId();
-  const hex = rgbToHex(colour);
-  const [hexDraft, setHexDraft] = useState(hex);
-  const [hexFocused, setHexFocused] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const displayHex = hexFocused ? hexDraft : hex;
 
   return (
-    <div className={cn("space-y-2", className)}>
-      <div className="grid grid-cols-[7.75rem_minmax(0,1fr)] items-center gap-x-4 gap-y-2 sm:[grid-template-columns:7.75rem_9.1rem_auto]">
-        <Label htmlFor={`${baseId}-picker`} className="mb-0 shrink-0">
+    <div className={cn(className)}>
+      <div className="flex items-center gap-x-4">
+        <Label htmlFor={`${baseId}-picker`} className="mb-0 w-[7.75rem] shrink-0">
           Colour picker
         </Label>
         <ColourPickerDropdown
@@ -159,50 +154,9 @@ export function ColourPickerAndHex({
           onOpenChange={(open) => {
             if (open) onPickerOpen?.();
           }}
-          onChange={(next) => {
-            setError(null);
-            onChange(next);
-          }}
+          onChange={onChange}
         />
-        <div className="col-span-2 flex min-w-0 items-center gap-1.5 sm:col-span-1">
-          <Label htmlFor={`${baseId}-hex`} className="mb-0 w-8 shrink-0">
-            HEX
-          </Label>
-          <Input
-            id={`${baseId}-hex`}
-            value={displayHex}
-            spellCheck={false}
-            autoComplete="off"
-            className="min-w-0 flex-1 font-mono sm:w-[9.5rem] sm:flex-none"
-            onFocus={() => {
-              setHexFocused(true);
-              setHexDraft(hex);
-            }}
-            onBlur={() => {
-              setHexFocused(false);
-              const parsed = parseHexInput(hexDraft);
-              if (parsed.ok) {
-                setError(null);
-                onChange(parsed.value);
-              } else {
-                setError(parsed.message);
-                setHexDraft(hex);
-              }
-            }}
-            onChange={(event) => {
-              const next = event.target.value;
-              setHexDraft(next);
-              const parsed = parseHexInput(next);
-              if (parsed.ok) {
-                setError(null);
-                onChange(parsed.value);
-              }
-            }}
-          />
-          <CopyValueButton value={hex} ariaLabel="Copy HEX value" />
-        </div>
       </div>
-      {error ? <FriendlyError message={error} /> : null}
     </div>
   );
 }
@@ -341,10 +295,17 @@ export function ColourFormatControls({
 
   const [drafts, setDrafts] = useState<ChannelDrafts>({});
   const [error, setError] = useState<string | null>(null);
+  const [hexDraft, setHexDraft] = useState(hex);
+  const [hexFocused, setHexFocused] = useState(false);
+  const displayHex = hexFocused ? hexDraft : hex;
 
   useEffect(() => {
     setDrafts({});
   }, [hex]);
+
+  useEffect(() => {
+    if (!hexFocused) setHexDraft(hex);
+  }, [hex, hexFocused]);
 
   function commitRgb(next: RgbColour) {
     setError(null);
@@ -378,6 +339,56 @@ export function ColourFormatControls({
 
   return (
     <div className={cn("space-y-4", className)}>
+      <div className="grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-x-1 sm:grid-cols-[3.25rem_minmax(0,1fr)_auto] sm:gap-x-1.5 lg:grid-cols-[5.5rem_minmax(0,1fr)_auto] lg:gap-x-2">
+        <p className="text-[0.6875rem] font-semibold leading-tight text-foreground sm:text-xs lg:text-[0.9375rem] lg:font-medium lg:text-base">
+          HEX
+        </p>
+        <input
+          id={`${baseId}-hex`}
+          value={displayHex}
+          spellCheck={false}
+          autoComplete="off"
+          aria-label="HEX"
+          className={cn(
+            "h-9 w-full min-w-0 rounded-md border border-border bg-surface",
+            "px-2 font-mono text-sm text-foreground shadow-soft-sm tabular-nums",
+            "transition-[border-color,box-shadow] duration-200",
+            "hover:border-accent/40",
+            "focus:border-accent focus:outline-none focus:ring-2 focus:ring-ring/25",
+            "lg:h-10 lg:rounded-lg lg:px-2.5 lg:text-[0.9375rem] lg:text-base",
+          )}
+          onFocus={() => {
+            setHexFocused(true);
+            setHexDraft(hex);
+          }}
+          onBlur={() => {
+            setHexFocused(false);
+            const parsed = parseHexInput(hexDraft);
+            if (parsed.ok) {
+              setError(null);
+              onChange(parsed.value);
+            } else {
+              setError(parsed.message);
+              setHexDraft(hex);
+            }
+          }}
+          onChange={(event) => {
+            const next = event.target.value;
+            setHexDraft(next);
+            const parsed = parseHexInput(next);
+            if (parsed.ok) {
+              setError(null);
+              onChange(parsed.value);
+            }
+          }}
+        />
+        <CopyValueButton
+          value={hex}
+          ariaLabel="Copy HEX value"
+          className="!h-8 !w-8 lg:!h-10 lg:!w-10"
+        />
+      </div>
+
       <ChannelRow
         label="RGB"
         copyValue={formatChannelsForCopy(rgb.r, rgb.g, rgb.b)}

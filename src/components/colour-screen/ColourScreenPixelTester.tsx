@@ -20,6 +20,10 @@ import {
   ImageColourPicker,
   type SampledColour,
 } from "@/components/colour-screen/ImageColourPicker";
+import {
+  PREVIEW_OVERLAY_BUTTON_CLASS,
+  PREVIEW_OVERLAY_LABEL_CLASS,
+} from "@/components/colour-screen/previewOverlayChrome";
 import { ToolWorkspaceShell } from "@/components/tools/ToolWorkspaceShell";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -187,6 +191,10 @@ export function ColourScreenPixelTester() {
   const dragFromIndexRef = useRef<number | null>(null);
   const [testActive, setTestActive] = useState(false);
   const [previewCycleActive, setPreviewCycleActive] = useState(false);
+  const [colourValuesOpen, setColourValuesOpen] = useState(false);
+  const [cursorMarkerOpen, setCursorMarkerOpen] = useState(false);
+  const [colourCycleOpen, setColourCycleOpen] = useState(false);
+  const [pixelWorkflowsOpen, setPixelWorkflowsOpen] = useState(false);
   const [saveColourMenuOpen, setSaveColourMenuOpen] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<
     (typeof PIXEL_WORKFLOWS)[number]["id"] | null
@@ -904,27 +912,37 @@ export function ColourScreenPixelTester() {
           </div>
 
           <div className="grid gap-5 lg:grid-cols-2 lg:items-start lg:gap-6">
-            <div className="order-1 min-w-0 space-y-3" data-colour-values-panel>
-              <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">
-                Colour values
-              </p>
-              <ColourFormatControls
-                colour={background}
-                onChange={setBackground}
-              />
-            </div>
-
-            <div className="order-3 min-w-0 space-y-4 rounded-2xl border border-border bg-background/60 p-4">
-                <div>
+            <div
+              id="colour-cycle-panel"
+              className="order-2 min-w-0 space-y-4 rounded-2xl border border-border bg-background/60 p-4 lg:order-1"
+            >
+                <div className="flex items-center justify-between gap-3">
                   <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">
                     Colour cycle
                   </p>
-                  <p className="mt-1 text-[0.9375rem] leading-relaxed text-muted sm:text-base">
-                    Build a sequence, advance manually, or auto-cycle during the
-                    fullscreen test. Auto-cycle does not start when the page
-                    loads.
-                  </p>
+                  <button
+                    type="button"
+                    aria-expanded={colourCycleOpen}
+                    aria-controls="colour-cycle-panel"
+                    onClick={() => setColourCycleOpen((open) => !open)}
+                    className={cn(
+                      "inline-flex min-h-8 shrink-0 items-center rounded-md border border-border bg-surface px-2.5 text-sm font-medium text-muted shadow-soft-sm",
+                      "transition-[transform,border-color,color,background-color] duration-200",
+                      "hover:-translate-y-px hover:border-accent/40 hover:text-accent",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    )}
+                  >
+                    {colourCycleOpen ? "Hide" : "Show"}
+                  </button>
                 </div>
+
+                {colourCycleOpen ? (
+                  <>
+                <p className="text-[0.9375rem] leading-relaxed text-muted sm:text-base">
+                  Build a sequence, advance manually, or auto-cycle during the
+                  fullscreen test. Auto-cycle does not start when the page
+                  loads.
+                </p>
 
                 <p className="text-[0.9375rem] font-medium leading-relaxed text-accent sm:text-base">
                   {PHOTOSENSITIVITY_WARNING}
@@ -1242,9 +1260,11 @@ export function ColourScreenPixelTester() {
                     </label>
                   </div>
                 </div>
+                  </>
+                ) : null}
             </div>
 
-            <div className="order-2 space-y-4 lg:sticky lg:top-24 lg:row-span-2">
+            <div className="order-1 space-y-4 lg:sticky lg:top-24 lg:order-2">
               <div className="space-y-3">
                 <div
                   id="screen-colour-preview"
@@ -1261,22 +1281,20 @@ export function ColourScreenPixelTester() {
                     onNext={() => stepColourCycle("next")}
                     stepDisabled={enabledCount === 0}
                     topBanner={
-                      <p className="rounded-md bg-black/45 px-3 py-1.5 text-center text-sm font-medium text-white shadow-soft-sm">
+                      <p className={PREVIEW_OVERLAY_LABEL_CLASS}>
                         Colour cycle delay: {cycleDelayLabel}
                       </p>
                     }
                     action={
-                      <Button
+                      <button
                         type="button"
-                        variant="secondary"
-                        size="sm"
                         onClick={() =>
                           addColourToCycle(background, formatHex(background))
                         }
-                        className="!min-h-9 !border-border/30 !bg-surface/30 px-3 py-1.5 text-sm !text-white hover:!border-border/80 hover:!bg-surface/80 hover:!text-white"
+                        className={PREVIEW_OVERLAY_BUTTON_CLASS}
                       >
                         Add to cycle
-                      </Button>
+                      </button>
                     }
                   />
                 </div>
@@ -1296,160 +1314,228 @@ export function ColourScreenPixelTester() {
                   }}
                 />
                 <div
-                  role="separator"
-                  className="border-t border-border"
-                  aria-hidden="true"
-                />
-                <MarkerColourPicker
-                  colour={marker.colour}
-                  onChange={(colour) =>
-                    setMarker((prev) => ({ ...prev, colour }))
-                  }
-                />
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label htmlFor="marker-diameter">
-                      Diameter ({marker.diameter}px)
-                    </Label>
-                    <input
-                      id="marker-diameter"
-                      type="range"
-                      min={MARKER_LIMITS.diameterMin}
-                      max={MARKER_LIMITS.diameterMax}
-                      value={marker.diameter}
-                      onChange={(event) =>
-                        setMarker((prev) => ({
-                          ...prev,
-                          enabled: true,
-                          diameter: clampMarkerDiameter(
-                            Number(event.target.value),
-                          ),
-                        }))
-                      }
-                      className="mt-2 w-full"
-                    />
+                  id="colour-values-panel"
+                  data-colour-values-panel
+                  className="space-y-3 rounded-2xl border border-border bg-background/60 p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">
+                      Colour values
+                    </p>
+                    <button
+                      type="button"
+                      aria-expanded={colourValuesOpen}
+                      aria-controls="colour-values-panel"
+                      onClick={() => setColourValuesOpen((open) => !open)}
+                      className={cn(
+                        "inline-flex min-h-8 shrink-0 items-center rounded-md border border-border bg-surface px-2.5 text-sm font-medium text-muted shadow-soft-sm",
+                        "transition-[transform,border-color,color,background-color] duration-200",
+                        "hover:-translate-y-px hover:border-accent/40 hover:text-accent",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      )}
+                    >
+                      {colourValuesOpen ? "Hide" : "Show"}
+                    </button>
                   </div>
-                  <div>
-                    <Label htmlFor="marker-opacity">
-                      Opacity ({Math.round(marker.opacity * 100)}%)
-                    </Label>
-                    <input
-                      id="marker-opacity"
-                      type="range"
-                      min={MARKER_LIMITS.opacityMin}
-                      max={MARKER_LIMITS.opacityMax}
-                      step={0.05}
-                      value={marker.opacity}
-                      onChange={(event) =>
-                        setMarker((prev) => ({
-                          ...prev,
-                          enabled: true,
-                          opacity: clampMarkerOpacity(
-                            Number(event.target.value),
-                          ),
-                        }))
-                      }
-                      className="mt-2 w-full"
+                  {colourValuesOpen ? (
+                    <ColourFormatControls
+                      colour={background}
+                      onChange={setBackground}
                     />
-                  </div>
+                  ) : null}
                 </div>
-                <div className="space-y-4 rounded-2xl border border-border bg-background/60 p-4">
-                  <div>
+                <div
+                  id="cursor-marker-panel"
+                  className="space-y-4 rounded-2xl border border-border bg-background/60 p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
                     <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">
                       Cursor Marker
                     </p>
-                    <p className="mt-1 text-[0.9375rem] leading-relaxed text-muted sm:text-base">
-                      Move a contrasting ring over suspicious pixels to test
-                      individual colour channels.
-                    </p>
+                    <button
+                      type="button"
+                      aria-expanded={cursorMarkerOpen}
+                      aria-controls="cursor-marker-panel"
+                      onClick={() => setCursorMarkerOpen((open) => !open)}
+                      className={cn(
+                        "inline-flex min-h-8 shrink-0 items-center rounded-md border border-border bg-surface px-2.5 text-sm font-medium text-muted shadow-soft-sm",
+                        "transition-[transform,border-color,color,background-color] duration-200",
+                        "hover:-translate-y-px hover:border-accent/40 hover:text-accent",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      )}
+                    >
+                      {cursorMarkerOpen ? "Hide" : "Show"}
+                    </button>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2 sm:items-start">
-                    <div className="space-y-2">
-                      <label className="flex min-h-11 items-center gap-3">
-                        <input
-                          type="checkbox"
-                          checked={marker.enabled}
-                          onChange={(event) =>
-                            setMarker((prev) => ({
-                              ...prev,
-                              enabled: event.target.checked,
-                            }))
-                          }
-                          className="h-4 w-4 shrink-0 rounded border-border"
-                        />
-                        <span className="text-[0.9375rem] font-medium text-foreground sm:text-base">
-                          Enable marker
-                        </span>
-                      </label>
-                      <label className="flex min-h-11 items-center gap-3">
-                        <input
-                          type="checkbox"
-                          checked={marker.hideSystemCursor}
-                          onChange={(event) =>
-                            setMarker((prev) => ({
-                              ...prev,
-                              hideSystemCursor: event.target.checked,
-                            }))
-                          }
-                          className="h-4 w-4 shrink-0 rounded border-border"
-                        />
-                        <span className="text-[0.9375rem] font-medium text-foreground sm:text-base">
-                          Hide system cursor
-                        </span>
-                      </label>
-                    </div>
+                  {cursorMarkerOpen ? (
+                    <>
+                      <p className="text-[0.9375rem] leading-relaxed text-muted sm:text-base">
+                        Move a contrasting ring over suspicious pixels to test
+                        individual colour channels.
+                      </p>
 
-                    <div className="flex min-w-0 flex-wrap items-center gap-3">
-                      <Label
-                        htmlFor="marker-style"
-                        className="mb-0 shrink-0 whitespace-nowrap"
-                      >
-                        Marker style
-                      </Label>
-                      <Select
-                        id="marker-style"
-                        value={marker.style}
-                        onChange={(event) =>
-                          setMarker((prev) => ({
-                            ...prev,
-                            style: event.target.value as MarkerStyle,
-                          }))
+                      <MarkerColourPicker
+                        colour={marker.colour}
+                        onChange={(colour) =>
+                          setMarker((prev) => ({ ...prev, colour }))
                         }
-                        className="!w-[12.75rem] max-w-full shrink"
-                      >
-                        <option value="filled-circle">Filled circle</option>
-                        <option value="outline-ring">Outline ring</option>
-                        <option value="ring-dot">Ring with centre dot</option>
-                        <option value="crosshair">Crosshair</option>
-                      </Select>
-                    </div>
-                  </div>
+                      />
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <Label htmlFor="marker-diameter">
+                            Diameter ({marker.diameter}px)
+                          </Label>
+                          <input
+                            id="marker-diameter"
+                            type="range"
+                            min={MARKER_LIMITS.diameterMin}
+                            max={MARKER_LIMITS.diameterMax}
+                            value={marker.diameter}
+                            onChange={(event) =>
+                              setMarker((prev) => ({
+                                ...prev,
+                                enabled: true,
+                                diameter: clampMarkerDiameter(
+                                  Number(event.target.value),
+                                ),
+                              }))
+                            }
+                            className="mt-2 w-full"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="marker-opacity">
+                            Opacity ({Math.round(marker.opacity * 100)}%)
+                          </Label>
+                          <input
+                            id="marker-opacity"
+                            type="range"
+                            min={MARKER_LIMITS.opacityMin}
+                            max={MARKER_LIMITS.opacityMax}
+                            step={0.05}
+                            value={marker.opacity}
+                            onChange={(event) =>
+                              setMarker((prev) => ({
+                                ...prev,
+                                enabled: true,
+                                opacity: clampMarkerOpacity(
+                                  Number(event.target.value),
+                                ),
+                              }))
+                            }
+                            className="mt-2 w-full"
+                          />
+                        </div>
+                      </div>
 
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setMarker(DEFAULT_MARKER_SETTINGS)}
-                  >
-                    Reset marker settings
-                  </Button>
+                      <div className="grid gap-4 sm:grid-cols-2 sm:items-start">
+                        <div className="space-y-2">
+                          <label className="flex min-h-11 items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={marker.enabled}
+                              onChange={(event) =>
+                                setMarker((prev) => ({
+                                  ...prev,
+                                  enabled: event.target.checked,
+                                }))
+                              }
+                              className="h-4 w-4 shrink-0 rounded border-border"
+                            />
+                            <span className="text-[0.9375rem] font-medium text-foreground sm:text-base">
+                              Enable marker
+                            </span>
+                          </label>
+                          <label className="flex min-h-11 items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={marker.hideSystemCursor}
+                              onChange={(event) =>
+                                setMarker((prev) => ({
+                                  ...prev,
+                                  hideSystemCursor: event.target.checked,
+                                }))
+                              }
+                              className="h-4 w-4 shrink-0 rounded border-border"
+                            />
+                            <span className="text-[0.9375rem] font-medium text-foreground sm:text-base">
+                              Hide system cursor
+                            </span>
+                          </label>
+                        </div>
+
+                        <div className="flex min-w-0 flex-wrap items-center gap-3">
+                          <Label
+                            htmlFor="marker-style"
+                            className="mb-0 shrink-0 whitespace-nowrap"
+                          >
+                            Marker style
+                          </Label>
+                          <Select
+                            id="marker-style"
+                            value={marker.style}
+                            onChange={(event) =>
+                              setMarker((prev) => ({
+                                ...prev,
+                                style: event.target.value as MarkerStyle,
+                              }))
+                            }
+                            className="!w-[12.75rem] max-w-full shrink"
+                          >
+                            <option value="filled-circle">Filled circle</option>
+                            <option value="outline-ring">Outline ring</option>
+                            <option value="ring-dot">Ring with centre dot</option>
+                            <option value="crosshair">Crosshair</option>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setMarker(DEFAULT_MARKER_SETTINGS)}
+                      >
+                        Reset marker settings
+                      </Button>
+                    </>
+                  ) : null}
                 </div>
               </div>
             </div>
           </div>
 
           <div className="grid gap-5 lg:grid-cols-2 lg:items-start lg:gap-6">
-            <div className="space-y-4 rounded-2xl border border-border bg-background/60 p-4">
-              <div>
+            <div
+              id="pixel-workflows-panel"
+              className="space-y-4 rounded-2xl border border-border bg-background/60 p-4"
+            >
+              <div className="flex items-center justify-between gap-3">
                 <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">
                   Pixel test workflows
                 </p>
-                <p className="mt-1 text-[0.9375rem] leading-relaxed text-muted sm:text-base">
-                  One-click setups for common display checks. You can still edit
-                  the sequence afterward.
-                </p>
+                <button
+                  type="button"
+                  aria-expanded={pixelWorkflowsOpen}
+                  aria-controls="pixel-workflows-panel"
+                  onClick={() => setPixelWorkflowsOpen((open) => !open)}
+                  className={cn(
+                    "inline-flex min-h-8 shrink-0 items-center rounded-md border border-border bg-surface px-2.5 text-sm font-medium text-muted shadow-soft-sm",
+                    "transition-[transform,border-color,color,background-color] duration-200",
+                    "hover:-translate-y-px hover:border-accent/40 hover:text-accent",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  )}
+                >
+                  {pixelWorkflowsOpen ? "Hide" : "Show"}
+                </button>
               </div>
+              {pixelWorkflowsOpen ? (
+                <>
+              <p className="text-[0.9375rem] leading-relaxed text-muted sm:text-base">
+                One-click setups for common display checks. You can still edit
+                the sequence afterward.
+              </p>
               <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                 {PIXEL_WORKFLOWS.map((workflow) => {
                   const isSelected = selectedWorkflowId === workflow.id;
@@ -1505,6 +1591,8 @@ export function ColourScreenPixelTester() {
               <p className="text-[0.9375rem] leading-relaxed text-muted sm:text-base">
                 {CHROMA_KEY_NOTE}
               </p>
+                </>
+              ) : null}
             </div>
 
             <div className="space-y-4 rounded-2xl border border-border bg-background/60 p-4">
