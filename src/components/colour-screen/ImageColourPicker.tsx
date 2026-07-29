@@ -232,8 +232,19 @@ export function ImageColourPicker({
       });
     };
 
+    // Mobile: dragging to pan/sample must not scroll the page underneath.
+    const onTouchMove = (event: TouchEvent) => {
+      if (!gestureRef.current) return;
+      event.preventDefault();
+    };
+
     node.addEventListener("wheel", onWheel, { passive: false });
-    return () => node.removeEventListener("wheel", onWheel);
+    // Prefer document so the page can't scroll even if the gesture leaves the box.
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      node.removeEventListener("wheel", onWheel);
+      document.removeEventListener("touchmove", onTouchMove);
+    };
   }, [image]);
 
   const clearImage = useCallback(() => {
@@ -586,6 +597,7 @@ export function ImageColourPicker({
 
     const gesture = gestureRef.current;
     if (gesture && event.pointerId === gesture.pointerId) {
+      event.preventDefault();
       const dx = event.clientX - gesture.startX;
       const dy = event.clientY - gesture.startY;
 
@@ -886,7 +898,7 @@ export function ImageColourPicker({
                 tabIndex={0}
                 className={cn(
                   "relative h-[28rem] min-h-[28rem] overflow-hidden rounded-2xl border border-border bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0] sm:h-[36rem] sm:min-h-[36rem]",
-                  "cursor-crosshair outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  "cursor-crosshair touch-none select-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                   panning && "cursor-grabbing",
                 )}
                 onPointerMove={handlePreviewPointerMove}

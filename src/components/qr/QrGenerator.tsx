@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   useTransition,
-  type FormEvent,
 } from "react";
 import { GoogieEmptyStateIcon } from "@/components/brand/GoogieEmptyStateIcon";
 import { SparkleBurst } from "@/components/brand/SparkleBurst";
@@ -249,14 +248,10 @@ export function QrGenerator() {
     };
   }, [mode, urlInput, textInput, wifi, styleId, touched]);
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
+  function handleCreateWifiQr() {
     setTouched(true);
 
-    // URL and Text update the live preview as you type — no submit needed.
-    if (mode !== "wifi") return;
-
-    const result = resolvePayload(mode, urlInput, textInput, wifi);
+    const result = resolvePayload("wifi", urlInput, textInput, wifi);
     if (!result.ok) {
       setError(result.error);
       inputRef.current?.focus();
@@ -417,7 +412,7 @@ export function QrGenerator() {
             })}
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-6" noValidate>
+          <div className="mt-6 space-y-6">
             {mode === "url" ? (
               <div>
                 <Label htmlFor={inputId}>Website URL</Label>
@@ -436,6 +431,10 @@ export function QrGenerator() {
                   onChange={(event) => {
                     setUrlInput(event.target.value);
                     setTouched(true);
+                  }}
+                  onKeyDown={(event) => {
+                    // Stop mobile “Go” / Enter from trying to submit a page form.
+                    if (event.key === "Enter") event.preventDefault();
                   }}
                 />
               </div>
@@ -609,8 +608,9 @@ export function QrGenerator() {
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               {mode === "wifi" ? (
                 <Button
-                  type="submit"
+                  type="button"
                   disabled={busy}
+                  onClick={handleCreateWifiQr}
                   className="w-full sm:w-auto"
                 >
                   {isPending ? "Creating…" : "Create QR code"}
@@ -626,7 +626,7 @@ export function QrGenerator() {
                 Clear
               </Button>
             </div>
-          </form>
+          </div>
 
           <p className="sr-only" aria-live="polite">
             {statusMessage}
@@ -706,7 +706,11 @@ export function QrGenerator() {
             ) : (
               <EmptyState
                 title="Ready when you are"
-                description="Enter your details, then create your QR code."
+                description={
+                  mode === "wifi"
+                    ? "Enter your Wi‑Fi details, then create your QR code."
+                    : "Type or paste your content — the preview updates as you go."
+                }
               >
                 <GoogieEmptyStateIcon size="md" />
               </EmptyState>

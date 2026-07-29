@@ -68,11 +68,14 @@ export function Button(props: ButtonProps) {
   }
 
   const { children, variant, size, className, ...buttonProps } = props;
+  const resolvedType =
+    "type" in props && props.type != null ? props.type : "button";
 
   return (
     <button
       className={buttonClasses(variant, size, className)}
       {...buttonProps}
+      type={resolvedType}
     >
       {children}
     </button>

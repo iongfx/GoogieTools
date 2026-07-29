@@ -153,7 +153,8 @@ export function secureRandomInt(maxExclusive: number): number {
     throw new RangeError("maxExclusive must be a positive integer.");
   }
 
-  if (typeof crypto === "undefined" || !crypto.getRandomValues) {
+  const webCrypto = globalThis.crypto;
+  if (!webCrypto?.getRandomValues) {
     throw new Error("Secure randomness is not available in this environment.");
   }
 
@@ -163,7 +164,7 @@ export function secureRandomInt(maxExclusive: number): number {
 
   let value = 0;
   do {
-    crypto.getRandomValues(buffer);
+    webCrypto.getRandomValues(buffer);
     value = buffer[0]!;
   } while (value >= limit);
 
@@ -218,20 +219,28 @@ export function generatePassword(
     };
   }
 
-  const categoryPools = enabledCategories.map((category) =>
-    getCategoryCharset(category, options.avoidAmbiguous),
-  );
-  const fullPool = categoryPools.join("");
+  try {
+    const categoryPools = enabledCategories.map((category) =>
+      getCategoryCharset(category, options.avoidAmbiguous),
+    );
+    const fullPool = categoryPools.join("");
 
-  const chars: string[] = categoryPools.map((pool) => secureRandomChar(pool));
+    const chars: string[] = categoryPools.map((pool) => secureRandomChar(pool));
 
-  for (let i = chars.length; i < clampedLength; i += 1) {
-    chars.push(secureRandomChar(fullPool));
+    for (let i = chars.length; i < clampedLength; i += 1) {
+      chars.push(secureRandomChar(fullPool));
+    }
+
+    const password = secureShuffle(chars).join("");
+
+    return { ok: true, password };
+  } catch {
+    return {
+      ok: false,
+      error:
+        "This browser could not create a secure password. Try again, or use a newer browser.",
+    };
   }
-
-  const password = secureShuffle(chars).join("");
-
-  return { ok: true, password };
 }
 
 /**

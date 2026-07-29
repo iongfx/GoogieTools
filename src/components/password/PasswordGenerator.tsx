@@ -5,7 +5,6 @@ import {
   useId,
   useRef,
   useState,
-  type FormEvent,
 } from "react";
 import { GoogieEmptyStateIcon } from "@/components/brand/GoogieEmptyStateIcon";
 import { SparkleBurst } from "@/components/brand/SparkleBurst";
@@ -189,39 +188,37 @@ export function PasswordGenerator() {
   }
 
   function handleCategoryToggle(category: CharacterCategory) {
-    setOptions((prev) => {
-      if (prev[category] && wouldDisableLastCategory(prev, category)) {
-        setOptionsError(
-          "Keep at least one character type turned on.",
-        );
-        return prev;
-      }
-
-      setOptionsError(null);
-      return { ...prev, [category]: !prev[category] };
-    });
-  }
-
-  function runGenerate() {
-    const result = generatePassword(length, options);
-    if (!result.ok) {
-      setOptionsError(result.error);
-      setStatusMessage("Could not generate a password with these options.");
+    if (options[category] && wouldDisableLastCategory(options, category)) {
+      setOptionsError("Keep at least one character type turned on.");
       return;
     }
 
     setOptionsError(null);
-    setPassword(result.password);
-    setPasswordVisible(true);
-    setActionStatus(null);
-    setActionIsError(false);
-    setStatusMessage("Password ready.");
-    playSparkles();
+    setOptions((prev) => ({ ...prev, [category]: !prev[category] }));
   }
 
-  function handleGenerate(event: FormEvent) {
-    event.preventDefault();
-    runGenerate();
+  function runGenerate() {
+    try {
+      const result = generatePassword(length, options);
+      if (!result.ok) {
+        setOptionsError(result.error);
+        setStatusMessage("Could not generate a password with these options.");
+        return;
+      }
+
+      setOptionsError(null);
+      setPassword(result.password);
+      setPasswordVisible(true);
+      setActionStatus(null);
+      setActionIsError(false);
+      setStatusMessage("Password ready.");
+      playSparkles();
+    } catch {
+      setOptionsError(
+        "This browser could not create a secure password. Try again, or use a newer browser.",
+      );
+      setStatusMessage("Could not generate a password.");
+    }
   }
 
   async function handleCopy() {
@@ -259,7 +256,7 @@ export function PasswordGenerator() {
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.95fr)] lg:items-start lg:gap-x-12 lg:gap-y-8">
         {/* Configuration */}
         <div className="order-1 min-w-0">
-          <form onSubmit={handleGenerate} className="space-y-6" noValidate>
+          <div className="space-y-6">
             <div>
               <div className="mb-2 flex items-end justify-between gap-3">
                 <Label htmlFor={lengthSliderId} className="mb-0">
@@ -280,6 +277,13 @@ export function PasswordGenerator() {
                       handleLengthInputChange(event.target.value)
                     }
                     onBlur={handleLengthBlur}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleLengthBlur();
+                        runGenerate();
+                      }
+                    }}
                     className="w-[4.5rem] px-2 text-center tabular-nums"
                   />
                   <span className="text-sm text-muted" aria-hidden="true">
@@ -395,12 +399,7 @@ export function PasswordGenerator() {
                 Tip: keep several character types on for stronger passwords.
               </p>
             )}
-
-            {/* Hidden submit so Enter in the form still generates a password. */}
-            <button type="submit" className="sr-only">
-              Generate password
-            </button>
-          </form>
+          </div>
 
           <p className="sr-only" aria-live="polite">
             {statusMessage}

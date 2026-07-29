@@ -54,6 +54,27 @@ function SwapIcon({ className }: { className?: string }) {
   );
 }
 
+function CopyIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
 /** Format a computed value for the opposite input (no thousand separators). */
 function formatEditableAmount(value: number): string {
   return formatConversionNumber(value).replace(/,/g, "");
@@ -297,13 +318,13 @@ export function UnitConverter() {
       ? formatReverseRate(fromUnitDef, toUnitDef)
       : null;
 
-  async function handleCopy() {
-    const copyText = toAmount.trim();
-    if (!copyText || !hasResult) return;
+  async function handleCopy(raw: string) {
+    const copyText = raw.trim();
+    if (!copyText) return;
 
     if (!navigator.clipboard?.writeText) {
       showActionStatus(
-        "Copy isn’t supported here — select the result and copy it manually.",
+        "Copy isn’t supported here — select the number and copy it manually.",
         { isError: true, clearAfterMs: 4000 },
       );
       return;
@@ -315,7 +336,7 @@ export function UnitConverter() {
       setAnnounceMessage("Copied to clipboard.");
     } catch {
       showActionStatus(
-        "Couldn’t copy automatically — select the result and copy it manually.",
+        "Couldn’t copy automatically — select the number and copy it manually.",
         { isError: true, clearAfterMs: 4000 },
       );
     }
@@ -425,7 +446,7 @@ export function UnitConverter() {
               </Select>
             </div>
 
-            <div className="min-w-0">
+            <div className="relative min-w-0">
               <Input
                 id={fromAmountId}
                 name="fromAmount"
@@ -443,13 +464,28 @@ export function UnitConverter() {
                 onFocus={(event) => event.currentTarget.select()}
                 onMouseUp={(event) => event.preventDefault()}
                 onChange={(event) => handleFromAmountChange(event.target.value)}
-                className="text-center tabular-nums"
+                className="pr-10 text-center tabular-nums"
               />
+              <button
+                type="button"
+                onClick={() => void handleCopy(fromAmount)}
+                disabled={!fromAmount.trim()}
+                aria-label={`Copy ${fromUnitDef?.name ?? "from"} value`}
+                title="Copy number"
+                className={cn(
+                  "absolute right-1.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted transition-colors duration-200",
+                  "hover:bg-surface hover:text-accent",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  "disabled:pointer-events-none disabled:opacity-40",
+                )}
+              >
+                <CopyIcon />
+              </button>
             </div>
 
             <div aria-hidden="true" />
 
-            <div className="min-w-0">
+            <div className="relative min-w-0">
               <Input
                 id={toAmountId}
                 name="toAmount"
@@ -467,8 +503,23 @@ export function UnitConverter() {
                 onFocus={(event) => event.currentTarget.select()}
                 onMouseUp={(event) => event.preventDefault()}
                 onChange={(event) => handleToAmountChange(event.target.value)}
-                className="text-center tabular-nums"
+                className="pr-10 text-center tabular-nums"
               />
+              <button
+                type="button"
+                onClick={() => void handleCopy(toAmount)}
+                disabled={!toAmount.trim()}
+                aria-label={`Copy ${toUnitDef?.name ?? "to"} value`}
+                title="Copy number"
+                className={cn(
+                  "absolute right-1.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted transition-colors duration-200",
+                  "hover:bg-surface hover:text-accent",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  "disabled:pointer-events-none disabled:opacity-40",
+                )}
+              >
+                <CopyIcon />
+              </button>
             </div>
           </div>
 
@@ -505,12 +556,12 @@ export function UnitConverter() {
             <Button
               type="button"
               variant="primary"
-              onClick={() => void handleCopy()}
-              disabled={!hasResult}
-              aria-disabled={!hasResult}
+              onClick={() => void handleCopy(toAmount)}
+              disabled={!hasResult || !toAmount.trim()}
+              aria-disabled={!hasResult || !toAmount.trim()}
               className={cn(
                 "w-full sm:w-auto",
-                !hasResult &&
+                (!hasResult || !toAmount.trim()) &&
                   "border-border bg-surface text-muted shadow-none disabled:opacity-50",
               )}
             >

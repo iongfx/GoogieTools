@@ -197,18 +197,53 @@ export function ColourPickerDropdown({
     function handlePointerDown(event: PointerEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
         setOpen(false);
+        onOpenChange?.(false);
       }
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        onOpenChange?.(false);
+      }
+    }
+
+    // Mobile browsers treat drag as page scroll unless we block touchmove.
+    function handleTouchMove(event: TouchEvent) {
+      if (!dragging.current) return;
+      event.preventDefault();
     }
 
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("touchmove", handleTouchMove, { passive: false });
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("touchmove", handleTouchMove);
+    };
+  }, [open, onOpenChange]);
+
+  // Keep the page from scrolling behind the open picker on phones.
+  useEffect(() => {
+    if (!open) return;
+    const html = document.documentElement;
+    const body = document.body;
+    const previous = {
+      htmlOverflow: html.style.overflow,
+      bodyOverflow: body.style.overflow,
+      htmlOverscroll: html.style.overscrollBehavior,
+      bodyOverscroll: body.style.overscrollBehavior,
+    };
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    html.style.overscrollBehavior = "none";
+    body.style.overscrollBehavior = "none";
+    return () => {
+      html.style.overflow = previous.htmlOverflow;
+      body.style.overflow = previous.bodyOverflow;
+      html.style.overscrollBehavior = previous.htmlOverscroll;
+      body.style.overscrollBehavior = previous.bodyOverscroll;
     };
   }, [open]);
 
@@ -233,6 +268,7 @@ export function ColourPickerDropdown({
 
   function handleSvPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     event.preventDefault();
+    event.stopPropagation();
     dragging.current = "sv";
     event.currentTarget.setPointerCapture(event.pointerId);
     updateSvFromPointer(event.clientX, event.clientY);
@@ -240,13 +276,18 @@ export function ColourPickerDropdown({
 
   function handleSvPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     if (dragging.current !== "sv") return;
+    event.preventDefault();
     updateSvFromPointer(event.clientX, event.clientY);
   }
 
   function handleSvPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
     if (dragging.current !== "sv") return;
     dragging.current = null;
-    event.currentTarget.releasePointerCapture(event.pointerId);
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Capture may already be released.
+    }
   }
 
   function handleHueChange(raw: string) {
@@ -363,7 +404,7 @@ export function ColourPickerDropdown({
           <div
             ref={svRef}
             className={cn(
-              "relative w-full cursor-crosshair rounded-md border border-border",
+              "relative w-full cursor-crosshair touch-none select-none rounded-md border border-border",
               SV_AREA_CLASS,
             )}
             style={{
@@ -390,7 +431,7 @@ export function ColourPickerDropdown({
             />
           </div>
 
-          <label className="mt-3 flex w-full items-center">
+          <label className="mt-3 flex w-full touch-none items-center">
             <span className="sr-only">Hue</span>
             <input
               type="range"
@@ -399,13 +440,17 @@ export function ColourPickerDropdown({
               step={1}
               value={Math.round(hue)}
               onChange={(event) => handleHueChange(event.target.value)}
-              onPointerDown={() => {
+              onPointerDown={(event) => {
+                event.stopPropagation();
                 dragging.current = "hue";
               }}
               onPointerUp={() => {
                 dragging.current = null;
               }}
-              className="h-3 w-full cursor-pointer appearance-none rounded-full"
+              onPointerCancel={() => {
+                dragging.current = null;
+              }}
+              className="h-3 w-full cursor-pointer touch-none appearance-none rounded-full"
               style={{
                 background:
                   "linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)",
