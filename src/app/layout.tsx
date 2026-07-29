@@ -16,6 +16,9 @@ import {
 import { organizationSchema, websiteSchema } from "@/lib/schema";
 import "./globals.css";
 
+/** Refresh CDN-cached HTML often so deploys don’t leave browsers on deleted JS chunks. */
+export const revalidate = 60;
+
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
   subsets: ["latin"],
