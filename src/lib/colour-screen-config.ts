@@ -49,7 +49,8 @@ export const IMAGE_PICKER = {
   acceptExtensions: [".jpg", ".jpeg", ".png", ".webp"] as const,
   loupeGridSize: 11,
   loupeCellPx: 14,
-  zoomMin: 1,
+  /** Minimum zoom relative to cover-fill (1 = fills X and Y). */
+  zoomMin: 0.05,
   zoomMax: 16,
   zoomStep: 1.25,
   /** Multiplier applied per wheel tick when the preview is focused. */
@@ -224,7 +225,10 @@ export const EYEDROPPER_UNSUPPORTED =
   "Screen colour picking is not supported in this browser. You can still upload, paste, or load an image and select a colour from it.";
 
 export const CLIPBOARD_NO_IMAGE =
-  "No image was found on the clipboard. Try uploading the image instead.";
+  "No image was found on the clipboard. Copy a screenshot or image first, then try Paste image again — or press Ctrl+V (Cmd+V on Mac) in this section. You can also upload a file.";
+
+export const CLIPBOARD_PERMISSION_BLOCKED =
+  "Clipboard access was blocked. Allow clipboard permission for this site (lock icon in the address bar), or press Ctrl+V (Cmd+V on Mac) after clicking in this section.";
 
 export const CAMERA_UNSUPPORTED =
   "Taking a photo is not available on this device. Your browser could not find a camera, or camera access is not supported here.";

@@ -20,6 +20,7 @@ import {
 } from "@/lib/colour-formatting";
 import { getPresetById } from "@/lib/colour-presets";
 import {
+  displayedImageSize,
   mapPreviewPointToPixel,
   loupeSampleOrigin,
 } from "@/lib/colour-image-coords";
@@ -122,6 +123,19 @@ describe("image coordinates", () => {
     expect(mapped.inside).toBe(true);
     expect(mapped.x).toBe(50);
     expect(mapped.y).toBe(50);
+  });
+
+  it("fills both axes at zoom 1 for mismatched aspect ratios", () => {
+    const layout = {
+      width: 400,
+      height: 200,
+      imageWidth: 100,
+      imageHeight: 100,
+    };
+    const size = displayedImageSize(layout, { zoom: 1, panX: 0, panY: 0 });
+    // Cover scale = max(400/100, 200/100) = 4 → 400×400, filling width and height.
+    expect(size.width).toBe(400);
+    expect(size.height).toBe(400);
   });
 
   it("clamps loupe origins inside the image", () => {

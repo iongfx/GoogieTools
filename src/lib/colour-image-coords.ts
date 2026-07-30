@@ -5,7 +5,7 @@
  */
 
 export type ImageViewTransform = {
-  /** Zoom multiplier relative to fit-contain scale (1 = fitted). */
+  /** Zoom multiplier relative to fit-cover scale (1 = fills X and Y). */
   zoom: number;
   /** Pan offset in preview CSS pixels (positive moves image right/down). */
   panX: number;
@@ -31,18 +31,20 @@ export type MappedPixel = {
   inside: boolean;
 };
 
+function layoutIsValid(layout: PreviewLayout): boolean {
+  return (
+    layout.width > 0 &&
+    layout.height > 0 &&
+    layout.imageWidth > 0 &&
+    layout.imageHeight > 0
+  );
+}
+
 /**
- * Fit-contain scale so the full image fits in the preview box at zoom = 1.
+ * Fit-contain scale so the full image fits inside the preview box.
  */
 export function fitContainScale(layout: PreviewLayout): number {
-  if (
-    layout.width <= 0 ||
-    layout.height <= 0 ||
-    layout.imageWidth <= 0 ||
-    layout.imageHeight <= 0
-  ) {
-    return 1;
-  }
+  if (!layoutIsValid(layout)) return 1;
   return Math.min(
     layout.width / layout.imageWidth,
     layout.height / layout.imageHeight,
@@ -50,13 +52,36 @@ export function fitContainScale(layout: PreviewLayout): number {
 }
 
 /**
+ * Fit-cover scale so the image fills the preview on both X and Y
+ * (overflow is cropped).
+ */
+export function fitCoverScale(layout: PreviewLayout): number {
+  if (!layoutIsValid(layout)) return 1;
+  return Math.max(
+    layout.width / layout.imageWidth,
+    layout.height / layout.imageHeight,
+  );
+}
+
+/**
+ * Zoom (relative to cover) that shows the whole image inside the preview.
+ */
+export function zoomToShowFullImage(layout: PreviewLayout): number {
+  const cover = fitCoverScale(layout);
+  const contain = fitContainScale(layout);
+  if (cover <= 0) return 1;
+  return contain / cover;
+}
+
+/**
  * Displayed image size in CSS pixels for the current transform.
+ * At zoom = 1 the image fills the preview on both axes (cover).
  */
 export function displayedImageSize(
   layout: PreviewLayout,
   transform: ImageViewTransform,
 ): { width: number; height: number } {
-  const base = fitContainScale(layout);
+  const base = fitCoverScale(layout);
   const scale = base * transform.zoom;
   return {
     width: layout.imageWidth * scale,

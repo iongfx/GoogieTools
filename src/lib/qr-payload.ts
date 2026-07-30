@@ -3,7 +3,7 @@
  * Different “modes” use different payload formats scanners understand.
  */
 
-export type QrMode = "url" | "text" | "wifi";
+export type QrMode = "url" | "text" | "wifi" | "upload";
 
 export type WifiEncryption = "WPA" | "WEP" | "nopass";
 

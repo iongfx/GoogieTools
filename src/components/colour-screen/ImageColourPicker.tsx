@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -11,7 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { GoogieEmptyStateIcon } from "@/components/brand/GoogieEmptyStateIcon";
 import { ColourInspector } from "@/components/colour-screen/ColourInspector";
-import { PREVIEW_OVERLAY_BUTTON_CLASS } from "@/components/colour-screen/previewOverlayChrome";
+import { EyedropperIcon } from "@/components/colour-screen/EyedropperIcon";
 import { Button } from "@/components/ui/Button";
 import { FriendlyError } from "@/components/ui/FriendlyError";
 import { Input } from "@/components/ui/Input";
@@ -21,21 +22,33 @@ import {
   imageOriginInPreview,
   loupeSampleOrigin,
   mapPreviewPointToPixel,
+  zoomToShowFullImage,
   type ImageViewTransform,
 } from "@/lib/colour-image-coords";
 import {
   validateColourPickerImageFile,
   validateImageUrl,
 } from "@/lib/colour-image-url";
+import { hexToRgb, rgbToCss, rgbToHex } from "@/lib/colour-conversions";
 import {
   CAMERA_PERMISSION_BLOCKED,
   CAMERA_UNSUPPORTED,
   CLIPBOARD_NO_IMAGE,
+  CLIPBOARD_PERMISSION_BLOCKED,
   CORS_SAMPLE_BLOCKED,
+  EYEDROPPER_UNSUPPORTED,
   IMAGE_PICKER,
 } from "@/lib/colour-screen-config";
 import type { RgbColour } from "@/lib/colour-types";
 import { cn } from "@/lib/utils";
+
+declare global {
+  interface Window {
+    EyeDropper?: new () => {
+      open: () => Promise<{ sRGBHex: string }>;
+    };
+  }
+}
 
 export type SampledColour = {
   rgb: RgbColour;
@@ -83,6 +96,7 @@ export function ImageColourPicker({
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const cameraSessionRef = useRef(0);
   const previewRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const loupeRef = useRef<HTMLCanvasElement>(null);
 
   const [image, setImage] = useState<LoadedImage | null>(null);
@@ -91,6 +105,7 @@ export function ImageColourPicker({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [cameraSupported, setCameraSupported] = useState(false);
+  const [eyeDropperSupported, setEyeDropperSupported] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
   const [hoverPixel, setHoverPixel] = useState<{
@@ -117,6 +132,19 @@ export function ImageColourPicker({
 
   const PAN_DRAG_THRESHOLD_PX = 4;
 
+  function minZoomForCurrentImage(): number {
+    if (!image) return IMAGE_PICKER.zoomMin;
+    return Math.max(
+      IMAGE_PICKER.zoomMin,
+      zoomToShowFullImage({
+        width: previewSize.width,
+        height: previewSize.height,
+        imageWidth: image.naturalWidth,
+        imageHeight: image.naturalHeight,
+      }),
+    );
+  }
+
   function clearScrollReleaseTimeout() {
     if (scrollReleaseTimeoutRef.current !== null) {
       clearTimeout(scrollReleaseTimeoutRef.current);
@@ -135,17 +163,25 @@ export function ImageColourPicker({
     }, 1000);
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = previewRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      setPreviewSize({
-        width: entry.contentRect.width,
-        height: entry.contentRect.height,
-      });
-    });
+
+    const syncSize = () => {
+      const width = el.clientWidth;
+      const height = el.clientHeight;
+      if (width <= 0 || height <= 0) return;
+      setPreviewSize((prev) =>
+        prev.width === width && prev.height === height
+          ? prev
+          : { width, height },
+      );
+    };
+
+    // Measure before paint so a newly loaded image fits the real preview box
+    // (not the placeholder 640×448 default).
+    syncSize();
+    const observer = new ResizeObserver(syncSize);
     observer.observe(el);
     return () => observer.disconnect();
   }, [image]);
@@ -157,6 +193,9 @@ export function ImageColourPicker({
       window.isSecureContext &&
       !!navigator.mediaDevices?.getUserMedia;
     setCameraSupported(canUseCameraApi);
+    setEyeDropperSupported(
+      typeof window !== "undefined" && "EyeDropper" in window,
+    );
   }, []);
 
   const stopCameraStream = useCallback(() => {
@@ -217,6 +256,7 @@ export function ImageColourPicker({
       event.stopPropagation();
 
       const direction = event.deltaY > 0 ? -1 : 1;
+      const minZoom = minZoomForCurrentImage();
       setTransform((prev) => {
         const nextZoom =
           direction > 0
@@ -224,10 +264,7 @@ export function ImageColourPicker({
                 IMAGE_PICKER.zoomMax,
                 prev.zoom * IMAGE_PICKER.wheelZoomFactor,
               )
-            : Math.max(
-                IMAGE_PICKER.zoomMin,
-                prev.zoom / IMAGE_PICKER.wheelZoomFactor,
-              );
+            : Math.max(minZoom, prev.zoom / IMAGE_PICKER.wheelZoomFactor);
         if (nextZoom === prev.zoom) return prev;
         return { ...prev, zoom: nextZoom };
       });
@@ -246,7 +283,7 @@ export function ImageColourPicker({
       node.removeEventListener("wheel", onWheel);
       document.removeEventListener("touchmove", onTouchMove);
     };
-  }, [image]);
+  }, [image, previewSize.height, previewSize.width]);
 
   const clearImage = useCallback(() => {
     clearScrollReleaseTimeout();
@@ -441,22 +478,26 @@ export function ImageColourPicker({
 
   async function handlePasteImage() {
     setError(null);
-    try {
-      if (navigator.clipboard?.read) {
+    // So Ctrl/Cmd+V can land on this section if the async clipboard read is blocked.
+    rootRef.current?.focus({ preventScroll: true });
+
+    if (typeof navigator !== "undefined" && navigator.clipboard?.read) {
+      try {
         const items = await navigator.clipboard.read();
-        for (const item of items) {
-          const type = item.types.find((t) => t.startsWith("image/"));
-          if (!type) continue;
-          const blob = await item.getType(type);
-          const file = new File([blob], "clipboard-image.png", { type: blob.type });
-          await handleFiles([file]);
+        const file = await clipboardItemsToImageFile(items);
+        if (file) {
+          await handleFiles([file], "Pasted image");
+          return;
+        }
+      } catch (err) {
+        if (isClipboardPermissionError(err)) {
+          setError(CLIPBOARD_PERMISSION_BLOCKED);
           return;
         }
       }
-      setError(CLIPBOARD_NO_IMAGE);
-    } catch {
-      setError(CLIPBOARD_NO_IMAGE);
     }
+
+    setError(CLIPBOARD_NO_IMAGE);
   }
 
   async function handleLoadUrl() {
@@ -475,7 +516,7 @@ export function ImageColourPicker({
         return {
           url: validated.url,
           revokeOnClear: false,
-          sourceLabel: `Image URL (${validated.url})`,
+          sourceLabel: "Image URL",
           naturalWidth: img.naturalWidth,
           naturalHeight: img.naturalHeight,
           sampleCanvas: canvas,
@@ -704,45 +745,108 @@ export function ImageColourPicker({
     previewRef.current?.releasePointerCapture(event.pointerId);
   }
 
+  async function handleEyeDropper() {
+    setError(null);
+    if (!window.EyeDropper) {
+      setError(EYEDROPPER_UNSUPPORTED);
+      return;
+    }
+    try {
+      const dropper = new window.EyeDropper();
+      const result = await dropper.open();
+      const rgb = hexToRgb(result.sRGBHex);
+      if (!rgb) return;
+
+      // Leave image mode so the preview shows the solid picked colour.
+      clearScrollReleaseTimeout();
+      stopCameraStream();
+      setCameraOpen(false);
+      setCameraStarting(false);
+      setImage((prev) => {
+        if (prev?.revokeOnClear) URL.revokeObjectURL(prev.url);
+        return null;
+      });
+      setTransform(DEFAULT_TRANSFORM);
+      setHoverPixel(null);
+
+      const next: SampledColour = {
+        rgb,
+        alpha: 1,
+        sourceLabel: "Screen eyedropper",
+        coordinates: null,
+      };
+      setSample(next);
+      onSampled(next);
+    } catch {
+      // User cancelled the eyedropper — no error.
+    }
+  }
+
   return (
     <div
-      className={cn("space-y-4", className)}
+      ref={rootRef}
+      tabIndex={-1}
+      className={cn("space-y-4 outline-none", className)}
       onPaste={(event) => {
-        const items = event.clipboardData?.items;
+        const data = event.clipboardData;
+        if (!data) return;
+
+        // Windows screenshots often arrive as files on the paste event.
+        if (data.files?.length) {
+          for (const file of Array.from(data.files)) {
+            if (file.type.startsWith("image/") || /\.(png|jpe?g|webp)$/i.test(file.name)) {
+              event.preventDefault();
+              setError(null);
+              void handleFiles([file], "Pasted image");
+              return;
+            }
+          }
+        }
+
+        const items = data.items;
         if (!items) return;
         for (const item of items) {
           if (item.type.startsWith("image/")) {
             event.preventDefault();
             const file = item.getAsFile();
-            if (file) void handleFiles([file]);
+            if (file) {
+              setError(null);
+              void handleFiles([file], "Pasted image");
+            }
             return;
           }
         }
       }}
     >
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2 sm:items-start sm:gap-6">
+          <div className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button
               type="button"
               variant="secondary"
               size="sm"
+              className="inline-flex w-full items-center justify-center gap-2 sm:w-auto"
               onClick={() => fileInputRef.current?.click()}
             >
+              <UploadImageIcon />
               Upload image
             </Button>
             <Button
               type="button"
               variant="secondary"
               size="sm"
+              className="inline-flex w-full items-center justify-center gap-2 sm:w-auto"
               onClick={() => void handlePasteImage()}
             >
+              <PasteImageIcon />
               Paste image
             </Button>
             <Button
               type="button"
               variant="secondary"
               size="sm"
+              className="inline-flex w-full items-center justify-center gap-2 sm:w-auto"
               disabled={!cameraSupported || cameraOpen}
               title={
                 cameraSupported
@@ -760,6 +864,7 @@ export function ImageColourPicker({
                 handleTakePhoto();
               }}
             >
+              <TakePhotoIcon />
               Take photo
             </Button>
             <input
@@ -776,12 +881,62 @@ export function ImageColourPicker({
               }}
             />
           </div>
-          <p className="text-[0.9375rem] leading-relaxed text-muted sm:text-base">
-            <span className="font-medium text-foreground">Take photo</span> opens
-            your webcam in this page. Use{" "}
-            <span className="font-medium text-foreground">Upload image</span> if
-            you want to choose a file from your computer.
-          </p>
+
+          <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center">
+            <Label
+              htmlFor={`${baseId}-url`}
+              className="mb-0 shrink-0 whitespace-nowrap"
+            >
+              Image URL
+            </Label>
+            <div className="flex min-w-0 items-center gap-2 lg:flex-1">
+              <Input
+                id={`${baseId}-url`}
+                value={urlDraft}
+                placeholder="https://example.com/image.png"
+                className="min-w-0 flex-1"
+                onChange={(event) => setUrlDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void handleLoadUrl();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="shrink-0 px-3"
+                onClick={() => void handleLoadUrl()}
+                disabled={loading}
+              >
+                Load image
+              </Button>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={!eyeDropperSupported}
+            title={
+              eyeDropperSupported
+                ? "Sample a colour from anywhere on your display"
+                : EYEDROPPER_UNSUPPORTED
+            }
+            aria-label={
+              eyeDropperSupported
+                ? "Pick a colour from your screen"
+                : "Pick a colour from your screen (not supported in this browser)"
+            }
+            onClick={() => void handleEyeDropper()}
+            className="inline-flex items-center gap-2"
+          >
+            <EyedropperIcon />
+            Pick a colour from your screen
+          </Button>
 
           {cameraOpen && typeof document !== "undefined"
             ? createPortal(
@@ -842,56 +997,44 @@ export function ImageColourPicker({
               )
             : null}
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="min-w-0 flex-1">
-              <Label htmlFor={`${baseId}-url`}>Image URL</Label>
-              <Input
-                id={`${baseId}-url`}
-                value={urlDraft}
-                placeholder="https://example.com/image.png"
-                onChange={(event) => setUrlDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void handleLoadUrl();
-                  }
-                }}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void handleLoadUrl()}
-              disabled={loading}
-            >
-              Load image
-            </Button>
-          </div>
-
-          {sample ? (
-            <ColourInspector
-              colour={sample.rgb}
-              alpha={sample.alpha}
-              sourceLabel={sample.sourceLabel}
-              coordinates={sample.coordinates}
-            />
-          ) : null}
-
-          <p className="text-[0.9375rem] leading-relaxed text-muted sm:text-base">
-            Local uploads and pasted images stay in your browser. Image URLs are
-            loaded directly by your browser and may be blocked by CORS.
-          </p>
-
           {error ? <FriendlyError message={error} /> : null}
           {loading ? (
             <p className="text-[0.9375rem] text-muted sm:text-base" role="status">
               Loading image…
             </p>
           ) : null}
+          </div>
+
+          <div className="min-w-0">
+            {sample ? (
+              <ColourInspector
+                colour={sample.rgb}
+                alpha={sample.alpha}
+                sourceLabel={sample.sourceLabel}
+                coordinates={sample.coordinates}
+                onAddToCycle={() => onAddToCycle(sample.rgb)}
+                onUseAsMarker={() => onUseAsMarker(sample.rgb)}
+              />
+            ) : (
+              <div className="flex h-full min-h-[7.5rem] flex-col justify-center rounded-2xl border border-dashed border-border bg-background/60 p-4 sm:p-5">
+                <p className="font-display text-lg font-semibold tracking-tight text-foreground">
+                  Selected colour
+                </p>
+                <p className="mt-1 text-[0.9375rem] leading-relaxed text-muted sm:text-base">
+                  Sample a pixel from the preview, or pick a colour from your
+                  screen, to see it here.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="space-y-2 lg:sticky lg:top-24">
-          <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">Image preview</p>
+        <div className="space-y-2">
+          <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">
+            {!image && sample?.sourceLabel === "Screen eyedropper"
+              ? "Colour preview"
+              : "Image preview"}
+          </p>
           {image ? (
             <>
               <div
@@ -923,28 +1066,12 @@ export function ImageColourPicker({
                 {hoverPixel && image.sampleCanvas ? (
                   <div
                     className="pointer-events-none absolute z-10 rounded-lg border border-white shadow-soft-md"
-                    style={{
-                      left: Math.min(
-                        previewSize.width - 170,
-                        Math.max(
-                          8,
-                          hoverPixel.clientX -
-                            (previewRef.current?.getBoundingClientRect()
-                              .left ?? 0) +
-                            16,
-                        ),
-                      ),
-                      top: Math.min(
-                        previewSize.height - 170,
-                        Math.max(
-                          8,
-                          hoverPixel.clientY -
-                            (previewRef.current?.getBoundingClientRect()
-                              .top ?? 0) +
-                            16,
-                        ),
-                      ),
-                    }}
+                    style={getLoupePosition(
+                      hoverPixel.clientX,
+                      hoverPixel.clientY,
+                      previewRef.current?.getBoundingClientRect() ?? null,
+                      previewSize,
+                    )}
                   >
                     <canvas
                       ref={loupeRef}
@@ -958,38 +1085,6 @@ export function ImageColourPicker({
                     />
                   </div>
                 ) : null}
-                <div className="pointer-events-none absolute inset-x-0 bottom-3 z-[2] flex justify-center px-3">
-                  <div
-                    data-preview-action
-                    className="pointer-events-auto flex gap-2"
-                    onPointerDown={(event) => event.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      disabled={!sample}
-                      aria-disabled={!sample}
-                      onClick={() => {
-                        if (!sample) return;
-                        onAddToCycle(sample.rgb);
-                      }}
-                      className={PREVIEW_OVERLAY_BUTTON_CLASS}
-                    >
-                      Add to cycle
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!sample}
-                      aria-disabled={!sample}
-                      onClick={() => {
-                        if (!sample) return;
-                        onUseAsMarker(sample.rgb);
-                      }}
-                      className={PREVIEW_OVERLAY_BUTTON_CLASS}
-                    >
-                      Use as marker colour
-                    </button>
-                  </div>
-                </div>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
                 <Button
@@ -1016,7 +1111,7 @@ export function ImageColourPicker({
                     setTransform((prev) => ({
                       ...prev,
                       zoom: Math.max(
-                        IMAGE_PICKER.zoomMin,
+                        minZoomForCurrentImage(),
                         prev.zoom / IMAGE_PICKER.zoomStep,
                       ),
                     }))
@@ -1048,6 +1143,36 @@ export function ImageColourPicker({
                 {image.sampleBlockedMessage
                   ? ` ${image.sampleBlockedMessage}`
                   : ""}
+              </p>
+              <p className="text-[0.9375rem] leading-relaxed text-muted sm:text-base">
+                Local uploads and pasted images stay in your browser. Image URLs
+                are loaded directly by your browser and may be blocked by CORS.
+              </p>
+            </>
+          ) : sample?.sourceLabel === "Screen eyedropper" ? (
+            <>
+              <div
+                className="h-[28rem] min-h-[28rem] overflow-hidden rounded-2xl border border-border sm:h-[36rem] sm:min-h-[36rem]"
+                style={{ backgroundColor: rgbToCss(sample.rgb) }}
+                role="img"
+                aria-label={`Picked colour ${rgbToHex(sample.rgb)}`}
+              />
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setSample(null);
+                    setError(null);
+                  }}
+                >
+                  Clear colour
+                </Button>
+              </div>
+              <p className="text-[0.9375rem] leading-relaxed text-muted sm:text-base">
+                Colour picked from your screen. Use the eyedropper button again
+                to pick a different colour.
               </p>
             </>
           ) : (
@@ -1082,6 +1207,164 @@ export function ImageColourPicker({
   );
 }
 
+function UploadImageIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="1.1rem"
+      height="1.1rem"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.85"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("shrink-0", className)}
+    >
+      <path d="M12 16V4" />
+      <path d="m7 9 5-5 5 5" />
+      <path d="M4 20h16" />
+    </svg>
+  );
+}
+
+function PasteImageIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="1.1rem"
+      height="1.1rem"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.85"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("shrink-0", className)}
+    >
+      <rect x="7" y="4" width="12" height="16" rx="2" />
+      <path d="M9 4.5h6" />
+      <path d="M10 2h4a1 1 0 0 1 1 1v1.5H9V3a1 1 0 0 1 1-1Z" />
+    </svg>
+  );
+}
+
+function TakePhotoIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="1.1rem"
+      height="1.1rem"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.85"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("shrink-0", className)}
+    >
+      <path d="M4 8h3l1.5-2h7L17 8h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z" />
+      <circle cx="12" cy="14" r="3.25" />
+    </svg>
+  );
+}
+
+function isClipboardPermissionError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const name = "name" in err ? String(err.name) : "";
+  const message = "message" in err ? String(err.message).toLowerCase() : "";
+  return (
+    name === "NotAllowedError" ||
+    name === "SecurityError" ||
+    message.includes("denied") ||
+    message.includes("permission") ||
+    message.includes("not allowed")
+  );
+}
+
+async function clipboardItemsToImageFile(
+  items: ClipboardItems,
+): Promise<File | null> {
+  const preferred = ["image/png", "image/jpeg", "image/webp", "image/bmp"];
+
+  for (const item of items) {
+    const types = Array.from(item.types);
+
+    for (const mime of preferred) {
+      if (!types.includes(mime)) continue;
+      try {
+        const blob = await item.getType(mime);
+        const file = await blobToSupportedImageFile(blob, mime);
+        if (file) return file;
+      } catch {
+        // Try the next type.
+      }
+    }
+
+    for (const type of types) {
+      if (!type.startsWith("image/") || type === "image/svg+xml") continue;
+      if (preferred.includes(type)) continue;
+      try {
+        const blob = await item.getType(type);
+        const file = await blobToSupportedImageFile(blob, type);
+        if (file) return file;
+      } catch {
+        // Try the next type.
+      }
+    }
+
+    // Some browsers list delayed types; try PNG even if it was not advertised.
+    try {
+      const blob = await item.getType("image/png");
+      const file = await blobToSupportedImageFile(blob, "image/png");
+      if (file) return file;
+    } catch {
+      // No PNG on this item.
+    }
+  }
+
+  return null;
+}
+
+/** Turn a clipboard blob into a JPG/PNG/WebP File (converts BMP etc. to PNG). */
+async function blobToSupportedImageFile(
+  blob: Blob,
+  mimeHint: string,
+): Promise<File | null> {
+  if (!blob || blob.size <= 0) return null;
+
+  const mime = (blob.type || mimeHint || "").toLowerCase();
+  if (
+    mime === "image/png" ||
+    mime === "image/jpeg" ||
+    mime === "image/webp"
+  ) {
+    const ext = mime === "image/jpeg" ? "jpg" : mime.slice("image/".length);
+    return new File([blob], `clipboard-image.${ext}`, { type: mime });
+  }
+
+  try {
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close();
+      return null;
+    }
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const pngBlob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/png");
+    });
+    if (!pngBlob || pngBlob.size <= 0) return null;
+    return new File([pngBlob], "clipboard-image.png", { type: "image/png" });
+  } catch {
+    return null;
+  }
+}
+
 function loadHtmlImage(url: string, useCors: boolean): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -1090,6 +1373,42 @@ function loadHtmlImage(url: string, useCors: boolean): Promise<HTMLImageElement>
     img.onerror = () => reject(new Error("load failed"));
     img.src = url;
   });
+}
+
+function getLoupePosition(
+  clientX: number,
+  clientY: number,
+  previewRect: DOMRect | null,
+  previewSize: { width: number; height: number },
+): React.CSSProperties {
+  const loupeSize =
+    IMAGE_PICKER.loupeGridSize * IMAGE_PICKER.loupeCellPx;
+  const gap = 16;
+  const margin = 8;
+  const cursorX = clientX - (previewRect?.left ?? 0);
+  const cursorY = clientY - (previewRect?.top ?? 0);
+
+  // Prefer below-right of the cursor; flip left/above near edges so the loupe
+  // does not cover the pixel under the pointer.
+  let left = cursorX + gap;
+  if (left + loupeSize > previewSize.width - margin) {
+    left = cursorX - gap - loupeSize;
+  }
+  left = Math.max(
+    margin,
+    Math.min(left, previewSize.width - loupeSize - margin),
+  );
+
+  let top = cursorY + gap;
+  if (top + loupeSize > previewSize.height - margin) {
+    top = cursorY - gap - loupeSize;
+  }
+  top = Math.max(
+    margin,
+    Math.min(top, previewSize.height - loupeSize - margin),
+  );
+
+  return { left, top };
 }
 
 function getImageStyle(

@@ -33,6 +33,7 @@ import {
   qrFilenameStem,
   type DownloadSizeId,
 } from "@/lib/qr";
+import { decodeQrFromImageFile } from "@/lib/qr-decode";
 import {
   buildTextPayload,
   buildWifiPayloadResult,
@@ -84,11 +85,15 @@ function createSparkleLayout(): SparkleLayout {
   };
 }
 
-const MODES: { id: QrMode; label: string }[] = [
+const CREATE_MODES: { id: Exclude<QrMode, "upload">; label: string }[] = [
   { id: "url", label: "URL" },
   { id: "text", label: "Text" },
   { id: "wifi", label: "Wi‑Fi" },
 ];
+
+const DECODE_ACCEPT =
+  "image/png,image/jpeg,image/jpg,image/webp,image/gif,image/bmp,.png,.jpg,.jpeg,.webp,.gif,.bmp";
+const DECODE_FILE_TYPES_LABEL = "PNG, JPG, or WebP";
 
 function resolvePayload(
   mode: QrMode,
@@ -105,6 +110,10 @@ function resolvePayload(
 
   if (mode === "text") {
     return buildTextPayload(textInput);
+  }
+
+  if (mode === "upload") {
+    return { ok: false, error: "Upload an image that contains a QR code." };
   }
 
   return buildWifiPayloadResult(wifi);
@@ -134,7 +143,9 @@ export function QrGenerator() {
   const errorId = useId();
   const sizeId = useId();
   const modeGroupId = useId();
+  const uploadInputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const generationId = useRef(0);
   const actionTimeoutRef = useRef<number | null>(null);
 
@@ -147,6 +158,10 @@ export function QrGenerator() {
     encryption: "WPA",
     hidden: false,
   });
+  const [decodedPayload, setDecodedPayload] = useState<string | null>(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [uploadFileName, setUploadFileName] = useState<string | null>(null);
+  const [isDecoding, setIsDecoding] = useState(false);
   const [styleId, setStyleId] = useState<QrColorStyleId>(DEFAULT_COLOR_STYLE_ID);
   const [downloadSize, setDownloadSize] = useState<DownloadSizeId>("large");
   const [error, setError] = useState<string | null>(null);
@@ -171,6 +186,12 @@ export function QrGenerator() {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (uploadedImageUrl) URL.revokeObjectURL(uploadedImageUrl);
+    };
+  }, [uploadedImageUrl]);
+
   function playSparkles() {
     setSparkleLayout(createSparkleLayout());
     setSparkleBurstKey((key) => key + 1);
@@ -185,8 +206,21 @@ export function QrGenerator() {
     );
   }
 
+  function clearUploadState() {
+    setDecodedPayload(null);
+    setUploadFileName(null);
+    setIsDecoding(false);
+    setUploadedImageUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    if (uploadInputRef.current) {
+      uploadInputRef.current.value = "";
+    }
+  }
+
   useEffect(() => {
-    const hasResult = Boolean(qr);
+    const hasResult = Boolean(qr) || Boolean(decodedPayload);
     if (hasResult && !hadQrRef.current) {
       setSparkleLayout(createSparkleLayout());
       setSparkleBurstKey((key) => key + 1);
@@ -204,10 +238,22 @@ export function QrGenerator() {
       }
     }
     hadQrRef.current = hasResult;
-  }, [qr]);
+  }, [qr, decodedPayload]);
 
   useEffect(() => {
     let cancelled = false;
+
+    // Decode mode shows the uploaded image + text result in the preview panel.
+    if (mode === "upload") {
+      setQr(null);
+      if (!decodedPayload) {
+        setStatusMessage("Upload a QR code image to decode it.");
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const result = resolvePayload(mode, urlInput, textInput, wifi);
 
     if (!result.ok) {
@@ -246,7 +292,7 @@ export function QrGenerator() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [mode, urlInput, textInput, wifi, styleId, touched]);
+  }, [mode, urlInput, textInput, wifi, styleId, touched, decodedPayload]);
 
   function handleCreateWifiQr() {
     setTouched(true);
@@ -280,24 +326,81 @@ export function QrGenerator() {
     });
   }
 
+  async function handleUploadFile(file: File | undefined) {
+    if (!file) return;
+
+    setMode("upload");
+    setTouched(true);
+    setIsDecoding(true);
+    setError(null);
+    setDecodedPayload(null);
+    setQr(null);
+    setUploadFileName(file.name);
+    setStatusMessage("Decoding QR code…");
+
+    setUploadedImageUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+
+    try {
+      const result = await decodeQrFromImageFile(file);
+      if (!result.ok) {
+        setError(result.error);
+        setStatusMessage("Could not decode that image.");
+        return;
+      }
+
+      setDecodedPayload(result.data);
+      setStatusMessage("Decoded QR ready.");
+      showActionStatus("QR code decoded");
+      playSparkles();
+    } catch {
+      setError(
+        "Couldn’t decode that image. Try another file or a clearer screenshot.",
+      );
+      setStatusMessage("Could not decode that image.");
+    } finally {
+      setIsDecoding(false);
+      if (uploadInputRef.current) {
+        uploadInputRef.current.value = "";
+      }
+    }
+  }
+
   function handleClear() {
     generationId.current += 1;
     setUrlInput("");
     setTextInput("");
     setWifi({ ssid: "", password: "", encryption: "WPA", hidden: false });
+    clearUploadState();
     setError(null);
     setTouched(false);
     setActionStatus(null);
     setQr(null);
-    setStatusMessage("Enter content to begin.");
-    inputRef.current?.focus();
+    setStatusMessage(
+      mode === "upload"
+        ? "Upload a QR code image to decode it."
+        : "Enter content to begin.",
+    );
+    if (mode !== "upload") {
+      inputRef.current?.focus();
+    }
   }
 
-  function handleModeChange(next: QrMode) {
+  function handleModeChange(next: Exclude<QrMode, "upload">) {
     setMode(next);
     setError(null);
     setTouched(false);
     setActionStatus(null);
+    clearUploadState();
+  }
+
+  function handleDecodeClick() {
+    setError(null);
+    setActionStatus(null);
+    // Open the system file picker right away from this click.
+    uploadInputRef.current?.click();
   }
 
   async function handleDownloadPng() {
@@ -368,10 +471,20 @@ export function QrGenerator() {
   }
 
   const hasQr = Boolean(qr);
+  const hasDecodeResult = Boolean(uploadedImageUrl);
   const showError = Boolean(error);
   const activeStyle = getColorStyle(styleId);
-  const hasAnyInput = Boolean(urlInput || textInput || wifi.ssid || hasQr);
-  const busy = isPending || isExporting;
+  const hasAnyInput = Boolean(
+    urlInput ||
+      textInput ||
+      wifi.ssid ||
+      decodedPayload ||
+      uploadFileName ||
+      uploadedImageUrl ||
+      hasQr,
+  );
+  const busy = isPending || isExporting || isDecoding;
+  const previewBusy = hasQr || (mode === "upload" && hasDecodeResult);
 
   return (
     <ToolWorkspaceShell icon={QR_TOOL.icon}>
@@ -382,34 +495,57 @@ export function QrGenerator() {
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.95fr)] lg:items-start lg:gap-x-12 lg:gap-y-8">
         {/* 1) Inputs — first on all screens */}
         <div className="order-1 min-w-0">
-          <div
-            className="inline-flex w-full rounded-xl border border-border bg-background p-1.5 sm:w-auto"
-            role="radiogroup"
-            aria-labelledby={modeGroupId}
-          >
-            <span id={modeGroupId} className="sr-only">
-              QR content type
-            </span>
-            {MODES.map((item) => {
-              const selected = mode === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => handleModeChange(item.id)}
-                  className={cn(
-                    "min-h-11 flex-1 rounded-lg px-5 py-2.5 text-[0.9375rem] font-semibold transition-colors duration-200 sm:flex-none sm:text-base",
-                    selected
-                      ? "bg-surface text-accent shadow-soft-sm"
-                      : "text-muted hover:text-foreground",
-                  )}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
+          <input
+            ref={uploadInputRef}
+            id={uploadInputId}
+            type="file"
+            accept={DECODE_ACCEPT}
+            className="sr-only"
+            onChange={(event) => {
+              void handleUploadFile(event.target.files?.[0]);
+            }}
+          />
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div
+              className="flex w-full flex-wrap gap-2.5 sm:w-auto"
+              role="radiogroup"
+              aria-labelledby={modeGroupId}
+            >
+              <span id={modeGroupId} className="sr-only">
+                QR content type
+              </span>
+              {CREATE_MODES.map((item) => {
+                const selected = mode === item.id;
+                return (
+                  <Button
+                    key={item.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    variant={selected ? "primary" : "secondary"}
+                    onClick={() => handleModeChange(item.id)}
+                    className="flex-1 sm:flex-none"
+                  >
+                    {item.label}
+                  </Button>
+                );
+              })}
+            </div>
+
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant={mode === "upload" ? "primary" : "secondary"}
+                disabled={busy}
+                onClick={handleDecodeClick}
+                className="w-full sm:w-auto"
+              >
+                {isDecoding ? "Decoding…" : "Decode QR Code"}
+              </Button>
+              <p className="text-[0.9375rem] text-muted sm:text-base">
+                {DECODE_FILE_TYPES_LABEL}
+              </p>
+            </div>
           </div>
 
           <div className="mt-6 space-y-6">
@@ -561,16 +697,17 @@ export function QrGenerator() {
               </div>
             ) : null}
 
-            {showError && error ? (
+            {showError && error && mode !== "upload" ? (
               <FriendlyError id={errorId} message={error} />
-            ) : mode !== "wifi" ? (
+            ) : mode === "wifi" || mode === "upload" ? null : (
               <p className="text-[0.9375rem] leading-relaxed text-muted">
                 {mode === "url"
                   ? "Tip: you can paste with or without https://"
                   : "Short, clear text scans more reliably."}
               </p>
-            ) : null}
+            )}
 
+            {mode !== "upload" ? (
             <fieldset>
               <legend className="mb-2.5 text-[0.9375rem] font-medium text-foreground sm:text-base">
                 Style
@@ -604,6 +741,7 @@ export function QrGenerator() {
                 })}
               </div>
             </fieldset>
+            ) : null}
 
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               {mode === "wifi" ? (
@@ -640,11 +778,123 @@ export function QrGenerator() {
         >
           <ToolResultPanel
             label="Live preview"
-            animate={hasQr}
+            animate={previewBusy}
             className="[&>p:first-child]:pr-16"
-            style={{ backgroundColor: activeStyle.light }}
+            style={
+              mode === "upload"
+                ? undefined
+                : { backgroundColor: activeStyle.light }
+            }
           >
-            {hasQr && qr ? (
+            {mode === "upload" && hasDecodeResult ? (
+              <div className="flex w-full flex-col items-center gap-5">
+                {decodedPayload ? (
+                  <SuccessMessage
+                    title="QR code decoded"
+                    description="Text only — no links were opened."
+                    className="mb-1"
+                  />
+                ) : null}
+
+                <div className="relative w-full overflow-visible px-5 sm:px-8">
+                  {decodedPayload ? (
+                    <>
+                      <span
+                        className="pointer-events-none absolute left-0 z-10 -translate-x-1/2 -translate-y-1/2"
+                        style={{ top: `${sparkleLayout.leftOffsetPercent}%` }}
+                      >
+                        <SparkleBurst
+                          playKey={sparkleBurstKey}
+                          delayMs={
+                            sparkleLayout.rightFirst ? SPARKLE_STAGGER_MS : 0
+                          }
+                          size="sm"
+                        />
+                      </span>
+                      <span
+                        className="pointer-events-none absolute right-0 z-10 translate-x-1/2 -translate-y-1/2"
+                        style={{ top: `${sparkleLayout.rightOffsetPercent}%` }}
+                      >
+                        <SparkleBurst
+                          playKey={sparkleBurstKey}
+                          delayMs={
+                            sparkleLayout.rightFirst ? 0 : SPARKLE_STAGGER_MS
+                          }
+                        />
+                      </span>
+                    </>
+                  ) : null}
+
+                  <div className="grid gap-4 sm:grid-cols-2 sm:gap-5">
+                    <div className="min-w-0 space-y-2">
+                      <p className="text-center text-[0.9375rem] font-medium text-foreground sm:text-base">
+                        Uploaded QR code
+                      </p>
+                      <div className="flex min-h-[12rem] items-center justify-center rounded-xl border border-border bg-background p-3 sm:min-h-[14rem]">
+                        {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview */}
+                        <img
+                          src={uploadedImageUrl!}
+                          alt={
+                            uploadFileName
+                              ? `Uploaded QR code image: ${uploadFileName}`
+                              : "Uploaded QR code image"
+                          }
+                          className="max-h-56 w-auto max-w-full object-contain"
+                        />
+                      </div>
+                      {uploadFileName ? (
+                        <p className="truncate text-center text-sm text-muted">
+                          {uploadFileName}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="min-w-0 space-y-2">
+                      <p className="text-center text-[0.9375rem] font-medium text-foreground sm:text-base">
+                        Decoded result
+                      </p>
+                      <div className="flex min-h-[12rem] flex-col rounded-xl border border-border bg-background p-3 sm:min-h-[14rem]">
+                        {isDecoding ? (
+                          <p className="m-auto text-center text-[0.9375rem] text-muted sm:text-base">
+                            Decoding…
+                          </p>
+                        ) : decodedPayload ? (
+                          <p className="m-0 whitespace-pre-wrap break-all font-mono text-sm leading-relaxed text-foreground sm:text-[0.9375rem]">
+                            {decodedPayload}
+                          </p>
+                        ) : showError && error ? (
+                          <FriendlyError
+                            id={errorId}
+                            message={error}
+                            className="m-auto text-center"
+                          />
+                        ) : (
+                          <p className="m-auto text-center text-[0.9375rem] text-muted sm:text-base">
+                            No text found yet.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  role="note"
+                  className="w-full rounded-xl border border-accent/30 bg-accent-soft/40 px-3.5 py-3 sm:px-4"
+                >
+                  <p className="text-[0.9375rem] font-semibold text-accent sm:text-base">
+                    Safety note
+                  </p>
+                  <p className="mt-1.5 text-[0.9375rem] leading-relaxed text-muted sm:text-base">
+                    We only show the text inside the QR code — we never open
+                    links or download files. Unknown codes can hide harmful or
+                    fake websites, look‑alike addresses, or Wi‑Fi passwords. Only
+                    trust codes from people or places you know. Decoding stays on
+                    your device. Press Decode QR Code again to try another image.
+                  </p>
+                </div>
+              </div>
+            ) : hasQr && qr ? (
               <div className="relative flex w-full flex-col items-center">
                 <SuccessMessage
                   title="Your QR code is ready"
@@ -686,7 +936,7 @@ export function QrGenerator() {
                   />
                 </div>
                 {mode === "url" || mode === "wifi" ? (
-                  <p className="mt-3 max-w-[18rem] truncate text-center text-[0.8125rem] text-muted sm:max-w-[20rem] sm:text-sm">
+                  <p className="mt-3 max-w-[18rem] break-all text-center text-[0.8125rem] text-muted sm:max-w-[20rem] sm:text-sm">
                     {mode === "url" ? (
                       <>
                         Using{" "}
@@ -709,7 +959,9 @@ export function QrGenerator() {
                 description={
                   mode === "wifi"
                     ? "Enter your Wi‑Fi details, then create your QR code."
-                    : "Type or paste your content — the preview updates as you go."
+                    : mode === "upload"
+                      ? "Pick a QR image to decode. Results appear here as text only."
+                      : "Type or paste your content — the preview updates as you go."
                 }
               >
                 <GoogieEmptyStateIcon size="md" />
@@ -719,31 +971,35 @@ export function QrGenerator() {
         </div>
 
         {/* 3) PNG size — under Create on desktop; above the shared action row */}
-        <div className="order-3 min-w-0">
-          <div className="max-w-xs">
-            <Label htmlFor={sizeId}>PNG download size</Label>
-            <Select
-              id={sizeId}
-              value={downloadSize}
-              onChange={(event) => {
-                const value = event.target.value;
-                if (isDownloadSizeId(value)) setDownloadSize(value);
-              }}
-            >
-              {DOWNLOAD_SIZES.map((size) => (
-                <option key={size.id} value={size.id}>
-                  {size.label} ({size.width}px)
-                </option>
-              ))}
-            </Select>
+        {mode !== "upload" ? (
+          <div className="order-3 min-w-0">
+            <div className="max-w-xs">
+              <Label htmlFor={sizeId}>PNG download size</Label>
+              <Select
+                id={sizeId}
+                value={downloadSize}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (isDownloadSizeId(value)) setDownloadSize(value);
+                }}
+              >
+                {DOWNLOAD_SIZES.map((size) => (
+                  <option key={size.id} value={size.id}>
+                    {size.label} ({size.width}px)
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
 
       {/*
         Shared action row — full-width rule across the tool box, buttons underneath
-        (same pattern as Free Password Generator).
+        (same pattern as Free Password Generator). Hidden while decoding because
+        there is no generated QR image to export.
       */}
+      {mode !== "upload" ? (
       <div className="mt-6 border-t border-border pt-5">
         <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center sm:gap-3">
           <Button
@@ -783,6 +1039,15 @@ export function QrGenerator() {
           </p>
         ) : null}
       </div>
+      ) : actionStatus ? (
+        <p
+          className="mt-6 text-center text-[0.9375rem] font-medium text-success"
+          role="status"
+          aria-live="polite"
+        >
+          {actionStatus}
+        </p>
+      ) : null}
     </Card>
     </ToolWorkspaceShell>
   );
