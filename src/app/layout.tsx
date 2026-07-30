@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans, Sora } from "next/font/google";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { ScrollToTop } from "@/components/layout/ScrollToTop";
+import { AdSenseScript } from "@/components/seo/AdSenseScript";
 import { CookieConsent } from "@/components/seo/CookieConsent";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { SkipToContent } from "@/components/seo/SkipToContent";
@@ -110,6 +111,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <AdSenseScript />
+      </head>
       <body
         className={`${jakarta.variable} ${sora.variable} flex min-h-screen flex-col font-sans antialiased`}
         suppressHydrationWarning

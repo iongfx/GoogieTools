@@ -55,9 +55,9 @@ export function CookieConsent() {
             id="cookie-consent-desc"
             className="mt-1 text-sm leading-relaxed text-muted"
           >
-            We use essential cookies to run the site. If we enable Google AdSense
-            or analytics later, those partners may use cookies to serve and
-            measure ads. See our{" "}
+            We use essential cookies to run the site. Google AdSense (and
+            analytics, if enabled) may use cookies to serve and measure ads.
+            See our{" "}
             <Link
               href="/privacy"
               className="font-medium text-accent underline-offset-2 hover:underline"
