@@ -4,10 +4,12 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   ColourFormatControls,
   ColourPickerAndHex,
@@ -187,6 +189,12 @@ export function ColourScreenPixelTester() {
   const [colourCycleOpen, setColourCycleOpen] = useState(false);
   const [pixelWorkflowsOpen, setPixelWorkflowsOpen] = useState(false);
   const [saveColourMenuOpen, setSaveColourMenuOpen] = useState(false);
+  const saveColourMenuRef = useRef<HTMLDivElement>(null);
+  const [saveColourMenuPos, setSaveColourMenuPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<
     (typeof PIXEL_WORKFLOWS)[number]["id"] | null
   >("rgb-pixel");
@@ -217,6 +225,33 @@ export function ColourScreenPixelTester() {
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
+
+  useLayoutEffect(() => {
+    if (!saveColourMenuOpen) {
+      setSaveColourMenuPos(null);
+      return;
+    }
+    const anchor = saveColourMenuRef.current;
+    if (!anchor) return;
+
+    function updateMenuPosition() {
+      const rect = saveColourMenuRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setSaveColourMenuPos({
+        top: rect.bottom + 8,
+        left: rect.left + rect.width / 2,
+        width: Math.max(180, Math.min(rect.width, 224)),
+      });
+    }
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [saveColourMenuOpen]);
 
   useEffect(() => {
     if (!saveColourMenuOpen) return;
@@ -719,7 +754,8 @@ export function ColourScreenPixelTester() {
           `Saved a PDF with ${choice === "all" ? "all colour values" : choice.toUpperCase()} and swatches for ${cycle.items.length} cycle colour${cycle.items.length === 1 ? "" : "s"}.`,
         );
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("Colour cycle PDF export failed:", error);
         setErrorMessage(
           "The colour cycle PDF could not be created. Please try again.",
         );
@@ -739,7 +775,17 @@ export function ColourScreenPixelTester() {
       return { ...prev, items };
     });
     setBackground(rgb);
+    setColourCycleOpen(true);
     setStatusMessage(`Added ${item.label} to the colour cycle.`);
+  }
+
+  function clearColourCycle() {
+    if (cycle.items.length === 0) return;
+    setPreviewCycleActive(false);
+    setSaveColourMenuOpen(false);
+    setCycle((prev) => ({ ...prev, items: [], paused: false }));
+    setCycleIndex(0);
+    setStatusMessage("Colour cycle cleared.");
   }
 
   function reorderCycleItem(fromIndex: number, toIndex: number) {
@@ -904,9 +950,18 @@ export function ColourScreenPixelTester() {
                   <FriendlyError message="Custom delays under 1 second can feel harsh. Consider a slower interval." />
                 ) : null}
 
-                <div className="grid gap-4 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start lg:gap-x-6">
-                  <div className="mx-auto flex w-[13.25rem] max-w-full flex-col items-center gap-3 lg:mx-0 lg:items-stretch">
-                  <ul className="w-full list-none space-y-1.5 p-0">
+                {cycle.items.length === 0 ? (
+                  <p
+                    className="rounded-xl border border-dashed border-border/80 bg-background/40 px-4 py-5 text-center text-[0.9375rem] leading-relaxed text-muted sm:text-base"
+                    role="status"
+                  >
+                    This list is empty. Add a colour from the screen preview or
+                    colour picker to build your cycle.
+                  </p>
+                ) : (
+                <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-[auto_minmax(12rem,1fr)] sm:items-start sm:gap-x-6">
+                  <ul className="mx-auto w-fit max-w-full list-none space-y-1.5 p-0 sm:mx-0">
                     {cycle.items.map((item, index) => {
                       const isCurrent = index === cycleIndex;
                       return (
@@ -924,7 +979,7 @@ export function ColourScreenPixelTester() {
                             reorderCycleItem(from, index);
                           }}
                           className={cn(
-                            "flex h-11 items-center gap-1.5 rounded-md border px-2",
+                            "flex h-11 w-fit max-w-full items-center gap-1.5 rounded-md border px-2",
                             isCurrent
                               ? "border-accent bg-accent-soft/50 ring-2 ring-accent/30"
                               : "border-border/80 bg-surface",
@@ -947,51 +1002,30 @@ export function ColourScreenPixelTester() {
                           >
                             <DragHandleIcon />
                           </button>
-                          <div className="flex min-w-0 flex-1 items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={item.enabled}
-                              onChange={(event) =>
-                                setCycle((prev) => ({
-                                  ...prev,
-                                  items: prev.items.map((entry) =>
-                                    entry.id === item.id
-                                      ? {
-                                          ...entry,
-                                          enabled: event.target.checked,
-                                        }
-                                      : entry,
-                                  ),
-                                }))
-                              }
-                              className="h-4 w-4 shrink-0 rounded border-border"
-                              aria-label={`Include ${item.label} in cycle`}
+                          <button
+                            type="button"
+                            className="flex shrink-0 items-center gap-2 text-left"
+                            aria-label={`Show ${item.label} in preview`}
+                            aria-pressed={isCurrent}
+                            onClick={() => {
+                              setCycleIndex(index);
+                              setBackground(item.rgb);
+                            }}
+                          >
+                            <span
+                              className="h-4 w-4 shrink-0 rounded-full border border-border"
+                              style={{ backgroundColor: rgbToCss(item.rgb) }}
+                              aria-hidden="true"
                             />
-                            <button
-                              type="button"
-                              className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                              aria-label={`Show ${item.label} in preview`}
-                              aria-pressed={isCurrent}
-                              onClick={() => {
-                                setCycleIndex(index);
-                                setBackground(item.rgb);
-                              }}
+                            <span
+                              className={cn(
+                                "w-[7ch] whitespace-nowrap font-mono text-[0.9375rem] font-medium tabular-nums sm:text-base",
+                                isCurrent ? "text-accent" : "text-foreground",
+                              )}
                             >
-                              <span
-                                className="h-4 w-4 shrink-0 rounded-full border border-border"
-                                style={{ backgroundColor: rgbToCss(item.rgb) }}
-                                aria-hidden="true"
-                              />
-                              <span
-                                className={cn(
-                                  "min-w-[7.5ch] truncate font-mono text-[0.9375rem] font-medium sm:text-base",
-                                  isCurrent ? "text-accent" : "text-foreground",
-                                )}
-                              >
-                                {item.label}
-                              </span>
-                            </button>
-                          </div>
+                              {item.label}
+                            </span>
+                          </button>
                           <button
                             type="button"
                             aria-label={`Remove ${item.label}`}
@@ -1019,51 +1053,9 @@ export function ColourScreenPixelTester() {
                       );
                     })}
                   </ul>
-                        <div
-                          className="relative flex w-full flex-col items-center"
-                          data-save-colour-menu
-                        >
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            aria-expanded={saveColourMenuOpen}
-                            aria-haspopup="menu"
-                            onClick={() =>
-                              setSaveColourMenuOpen((open) => !open)
-                            }
-                          >
-                            Save list to PDF
-                          </Button>
-                          {saveColourMenuOpen ? (
-                            <div
-                              role="menu"
-                              aria-label="Choose colour values to save"
-                              className="absolute top-full z-20 mt-2 w-full max-w-[14rem] rounded-xl border border-border bg-surface p-2 shadow-soft-md"
-                            >
-                              <p className="px-2 pb-2 text-center text-sm text-muted">
-                                Which values do you want to save?
-                              </p>
-                              <div className="flex flex-col gap-1">
-                                {COLOUR_EXPORT_OPTIONS.map((option) => (
-                                  <button
-                                    key={option.id}
-                                    type="button"
-                                    role="menuitem"
-                                    className="rounded-md px-3 py-2 text-left text-[0.9375rem] font-medium text-foreground hover:bg-accent-soft/70 hover:text-accent sm:text-base"
-                                    onClick={() => saveColourValues(option.id)}
-                                  >
-                                    {option.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-                  </div>
 
-                  <div className="flex min-w-0 w-full flex-col items-center gap-6">
-                    <div className="flex w-auto max-w-full items-center justify-center gap-1.5">
+                  <div className="flex w-full min-w-0 flex-col items-center gap-6 sm:min-w-[12rem]">
+                    <div className="flex w-auto max-w-full shrink-0 items-center justify-center gap-1.5">
                       <button
                         type="button"
                         aria-label="Previous colour in cycle"
@@ -1108,11 +1100,11 @@ export function ColourScreenPixelTester() {
                       </button>
                     </div>
 
-                    <div className="w-full space-y-4">
+                    <div className="w-full max-w-xs space-y-4 sm:max-w-none">
                       <div className="flex items-center gap-3">
                         <Label
                           htmlFor="cycle-delay"
-                          className="mb-0 shrink-0 whitespace-nowrap"
+                          className="mb-0 w-14 shrink-0 whitespace-nowrap"
                         >
                           Delay
                         </Label>
@@ -1126,7 +1118,7 @@ export function ColourScreenPixelTester() {
                                 .value as CycleDelayPreset,
                             }))
                           }
-                          className="!w-auto min-w-0 flex-1"
+                          className="min-w-[8rem] flex-1"
                         >
                           <option value="manual">Manual</option>
                           <option value="1">1 sec.</option>
@@ -1161,14 +1153,14 @@ export function ColourScreenPixelTester() {
                                 ),
                               }))
                             }
-                            className="!w-auto min-w-0 flex-1"
+                            className="min-w-[8rem] flex-1"
                           />
                         </div>
                       ) : null}
                       <div className="flex items-center gap-3">
                         <Label
                           htmlFor="cycle-order"
-                          className="mb-0 shrink-0 whitespace-nowrap"
+                          className="mb-0 w-14 shrink-0 whitespace-nowrap"
                         >
                           Order
                         </Label>
@@ -1182,7 +1174,7 @@ export function ColourScreenPixelTester() {
                                 .value as CycleSettings["order"],
                             }))
                           }
-                          className="!w-auto min-w-0 flex-1"
+                          className="min-w-[8rem] flex-1"
                         >
                           <option value="sequential">Sequential</option>
                           <option value="random">Random</option>
@@ -1201,12 +1193,82 @@ export function ColourScreenPixelTester() {
                           }))
                         }
                       />
-                      <span className="text-[0.9375rem] font-medium text-foreground sm:text-base">
+                      <span className="whitespace-nowrap text-[0.9375rem] font-medium text-foreground sm:text-base">
                         Loop continuously
                       </span>
                     </label>
                   </div>
                 </div>
+
+                        <div className="flex w-full max-w-md flex-col items-stretch gap-2 sm:flex-row sm:items-start">
+                        <div
+                          ref={saveColourMenuRef}
+                          className="relative min-w-0 flex-1"
+                          data-save-colour-menu
+                        >
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="w-full"
+                            aria-expanded={saveColourMenuOpen}
+                            aria-haspopup="menu"
+                            onClick={() =>
+                              setSaveColourMenuOpen((open) => !open)
+                            }
+                          >
+                            Save list to PDF
+                          </Button>
+                          {saveColourMenuOpen &&
+                          saveColourMenuPos &&
+                          typeof document !== "undefined"
+                            ? createPortal(
+                                <div
+                                  role="menu"
+                                  data-save-colour-menu
+                                  aria-label="Choose colour values to save"
+                                  className="fixed z-[80] -translate-x-1/2 rounded-xl border border-border bg-surface p-2 shadow-soft-md"
+                                  style={{
+                                    top: saveColourMenuPos.top,
+                                    left: saveColourMenuPos.left,
+                                    width: saveColourMenuPos.width,
+                                  }}
+                                >
+                                  <p className="px-2 pb-2 text-center text-sm text-muted">
+                                    Which values do you want to save?
+                                  </p>
+                                  <div className="flex flex-col gap-1">
+                                    {COLOUR_EXPORT_OPTIONS.map((option) => (
+                                      <button
+                                        key={option.id}
+                                        type="button"
+                                        role="menuitem"
+                                        className="rounded-md px-3 py-2 text-left text-[0.9375rem] font-medium text-foreground hover:bg-accent-soft/70 hover:text-accent sm:text-base"
+                                        onClick={() =>
+                                          saveColourValues(option.id)
+                                        }
+                                      >
+                                        {option.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>,
+                                document.body,
+                              )
+                            : null}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="w-full shrink-0 sm:w-auto"
+                          onClick={clearColourCycle}
+                        >
+                          Clear list
+                        </Button>
+                        </div>
+                </div>
+                )}
             </CollapsibleToolSection>
 
             <CollapsibleToolSection

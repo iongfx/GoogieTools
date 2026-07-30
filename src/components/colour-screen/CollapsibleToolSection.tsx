@@ -137,7 +137,13 @@ export function CollapsibleToolSection({
         )}
         aria-hidden={!open}
       >
-        <div className="min-h-0 overflow-hidden [overflow-anchor:none]">
+        <div
+          className={cn(
+            "min-h-0 [overflow-anchor:none]",
+            // Clip while collapsed/animating; allow menus to escape when open.
+            open ? "overflow-visible" : "overflow-hidden",
+          )}
+        >
           <div
             className={cn("pt-4", contentClassName)}
             inert={!open ? true : undefined}

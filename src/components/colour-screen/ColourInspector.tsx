@@ -1,16 +1,19 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { rgbToCss } from "@/lib/colour-conversions";
 import { formatHex } from "@/lib/colour-formatting";
 import type { RgbColour } from "@/lib/colour-types";
 import { cn } from "@/lib/utils";
 
+const FEEDBACK_MS = 2200;
+
 type ColourInspectorProps = {
   colour: RgbColour;
   alpha?: number;
-  sourceLabel?: string;
-  coordinates?: { x: number; y: number } | null;
+  /** Left-side label in the full-width strip (e.g. "Image preview"). */
+  title?: string;
   onUseAsBackground?: () => void;
   onUseAsMarker?: () => void;
   onAddToCycle?: () => void;
@@ -18,13 +21,13 @@ type ColourInspectorProps = {
 };
 
 /**
- * Compact selected-colour summary (swatch + HEX + actions under the swatch).
+ * Low-profile full-width strip: title on the left, swatch + HEX + actions on the right.
  * Full HEX/RGB/HSL/HSV/CMYK editing lives in Colour values near the preview.
  */
 export function ColourInspector({
   colour,
   alpha,
-  coordinates,
+  title,
   onUseAsBackground,
   onUseAsMarker,
   onAddToCycle,
@@ -32,70 +35,99 @@ export function ColourInspector({
 }: ColourInspectorProps) {
   const hex = formatHex(colour);
   const hasActions = onUseAsBackground || onUseAsMarker || onAddToCycle;
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = window.setTimeout(() => setFeedback(null), FEEDBACK_MS);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
+
+  function showFeedback(message: string) {
+    setFeedback(message);
+  }
 
   return (
     <div
       className={cn(
-        "rounded-2xl border border-border bg-surface p-4 sm:p-5",
+        "flex w-full flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-surface/80 px-3 py-2 sm:gap-3",
         className,
       )}
     >
-      <div className="flex items-start gap-3 sm:gap-4">
+      {title ? (
+        <p className="shrink-0 text-[0.9375rem] font-medium text-foreground sm:text-base">
+          {title}
+        </p>
+      ) : null}
+      <div className="min-w-[6rem] flex-1 px-2 text-center">
+        {feedback ? (
+          <p
+            className="text-sm font-semibold"
+            style={{ color: "#3b82f6" }}
+            role="status"
+            aria-live="polite"
+          >
+            {feedback}
+          </p>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <div
-          className="h-20 w-20 shrink-0 rounded-2xl border border-border shadow-soft-sm sm:h-24 sm:w-24"
+          className="h-8 w-8 shrink-0 rounded-md border border-border"
           style={{ backgroundColor: rgbToCss(colour, alpha ?? 1) }}
           role="img"
           aria-label={`Colour swatch ${hex}`}
         />
-        <div className="min-w-0 flex-1">
-          <p className="font-display text-lg font-semibold tracking-tight text-foreground">
-            Selected colour
-          </p>
-          <p className="mt-1 font-mono text-[0.9375rem] text-foreground sm:text-base">
-            {hex}
-          </p>
-          {coordinates ? (
-            <p className="mt-1 text-[0.9375rem] text-muted sm:text-base">
-              Pixel: {coordinates.x}, {coordinates.y}
-            </p>
-          ) : null}
-        </div>
+        <p className="shrink-0 font-mono text-sm tracking-tight text-foreground">
+          {hex}
+        </p>
+        {hasActions ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:ml-1">
+            {onAddToCycle ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-h-8 px-2.5 py-1 text-xs font-medium shadow-none hover:translate-y-0"
+                onClick={() => {
+                  onAddToCycle();
+                  showFeedback("Added to cycle");
+                }}
+              >
+                Add to cycle
+              </Button>
+            ) : null}
+            {onUseAsMarker ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-h-8 px-2.5 py-1 text-xs font-medium shadow-none hover:translate-y-0"
+                onClick={() => {
+                  onUseAsMarker();
+                  showFeedback("Set as marker colour");
+                }}
+              >
+                Use as marker
+              </Button>
+            ) : null}
+            {onUseAsBackground ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-h-8 px-2.5 py-1 text-xs font-medium shadow-none hover:translate-y-0"
+                onClick={() => {
+                  onUseAsBackground();
+                  showFeedback("Set as background");
+                }}
+              >
+                Use as background
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
-
-      {hasActions ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {onAddToCycle ? (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={onAddToCycle}
-            >
-              Add to cycle
-            </Button>
-          ) : null}
-          {onUseAsMarker ? (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={onUseAsMarker}
-            >
-              Use as marker colour
-            </Button>
-          ) : null}
-          {onUseAsBackground ? (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={onUseAsBackground}
-            >
-              Use as background
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

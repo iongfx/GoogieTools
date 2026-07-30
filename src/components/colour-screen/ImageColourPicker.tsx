@@ -819,222 +819,226 @@ export function ImageColourPicker({
       }}
     >
       <div className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2 sm:items-start sm:gap-6">
-          <div className="space-y-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="inline-flex w-full items-center justify-center gap-2 sm:w-auto"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <UploadImageIcon />
-              Upload image
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="inline-flex w-full items-center justify-center gap-2 sm:w-auto"
-              onClick={() => void handlePasteImage()}
-            >
-              <PasteImageIcon />
-              Paste image
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="inline-flex w-full items-center justify-center gap-2 sm:w-auto"
-              disabled={!cameraSupported || cameraOpen}
-              title={
-                cameraSupported
-                  ? "Open your webcam to take a photo"
-                  : CAMERA_UNSUPPORTED
-              }
-              aria-label={
-                cameraSupported
-                  ? "Take photo with webcam"
-                  : "Take photo (not available on this device)"
-              }
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                handleTakePhoto();
-              }}
-            >
-              <TakePhotoIcon />
-              Take photo
-            </Button>
-            <input
-              ref={fileInputRef}
-              id={`${baseId}-file`}
-              type="file"
-              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-              className="sr-only"
-              tabIndex={-1}
-              aria-hidden="true"
-              onChange={(event) => {
-                void handleFiles(event.target.files);
-                event.target.value = "";
-              }}
-            />
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center">
-            <Label
-              htmlFor={`${baseId}-url`}
-              className="mb-0 shrink-0 whitespace-nowrap"
-            >
-              Image URL
-            </Label>
-            <div className="flex min-w-0 items-center gap-2 lg:flex-1">
-              <Input
-                id={`${baseId}-url`}
-                value={urlDraft}
-                placeholder="https://example.com/image.png"
-                className="min-w-0 flex-1"
-                onChange={(event) => setUrlDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void handleLoadUrl();
-                  }
-                }}
-              />
+        <div className="grid gap-4 sm:grid-cols-2 sm:items-stretch sm:gap-4">
+          <div className="space-y-4 rounded-2xl border border-border bg-background/60 p-4">
+            <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">
+              Load an image
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
-                className="shrink-0 px-3"
-                onClick={() => void handleLoadUrl()}
-                disabled={loading}
+                className="inline-flex w-full items-center justify-center gap-2 sm:w-auto"
+                onClick={() => fileInputRef.current?.click()}
               >
-                Load image
+                <UploadImageIcon />
+                Upload image
               </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="inline-flex w-full items-center justify-center gap-2 sm:w-auto"
+                onClick={() => void handlePasteImage()}
+              >
+                <PasteImageIcon />
+                Paste image
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="inline-flex w-full items-center justify-center gap-2 sm:w-auto"
+                disabled={!cameraSupported || cameraOpen}
+                title={
+                  cameraSupported
+                    ? "Open your webcam to take a photo"
+                    : CAMERA_UNSUPPORTED
+                }
+                aria-label={
+                  cameraSupported
+                    ? "Take photo with webcam"
+                    : "Take photo (not available on this device)"
+                }
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleTakePhoto();
+                }}
+              >
+                <TakePhotoIcon />
+                Take photo
+              </Button>
+              <input
+                ref={fileInputRef}
+                id={`${baseId}-file`}
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+                onChange={(event) => {
+                  void handleFiles(event.target.files);
+                  event.target.value = "";
+                }}
+              />
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center">
+              <Label
+                htmlFor={`${baseId}-url`}
+                className="mb-0 shrink-0 whitespace-nowrap"
+              >
+                Image URL
+              </Label>
+              <div className="flex min-w-0 items-center gap-2 lg:flex-1">
+                <Input
+                  id={`${baseId}-url`}
+                  value={urlDraft}
+                  placeholder="https://example.com/image.png"
+                  className="min-w-0 flex-1"
+                  onChange={(event) => setUrlDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    if (!validateImageUrl(urlDraft).ok) return;
+                    void handleLoadUrl();
+                  }}
+                />
+                {validateImageUrl(urlDraft).ok ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="shrink-0 px-3"
+                    onClick={() => void handleLoadUrl()}
+                    disabled={loading}
+                  >
+                    Load image
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </div>
 
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={!eyeDropperSupported}
-            title={
-              eyeDropperSupported
-                ? "Sample a colour from anywhere on your display"
-                : EYEDROPPER_UNSUPPORTED
-            }
-            aria-label={
-              eyeDropperSupported
-                ? "Pick a colour from your screen"
-                : "Pick a colour from your screen (not supported in this browser)"
-            }
-            onClick={() => void handleEyeDropper()}
-            className="inline-flex items-center gap-2"
-          >
-            <EyedropperIcon />
-            Pick a colour from your screen
-          </Button>
-
-          {cameraOpen && typeof document !== "undefined"
-            ? createPortal(
-                <div
-                  className="fixed inset-0 z-[100] flex items-center justify-center bg-foreground/40 p-4"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-labelledby={`${baseId}-camera-title`}
-                  onClick={(event) => {
-                    if (event.target === event.currentTarget) closeCamera();
-                  }}
-                >
-                  <div className="w-full max-w-lg space-y-4 rounded-2xl border border-border bg-surface p-4 shadow-soft-md sm:p-5">
-                    <div>
-                      <h3
-                        id={`${baseId}-camera-title`}
-                        className="font-display text-lg font-semibold text-foreground sm:text-xl"
-                      >
-                        Take a photo
-                      </h3>
-                      <p className="mt-1 text-[0.9375rem] leading-relaxed text-muted sm:text-base">
-                        {cameraStarting
-                          ? "Starting your webcam… If your browser asks for permission, choose Allow."
-                          : "Line up your shot, then click Capture photo. Click Cancel to close the camera."}
-                      </p>
-                    </div>
-                    <div className="overflow-hidden rounded-2xl border border-border bg-background">
-                      <video
-                        ref={cameraVideoRef}
-                        className="aspect-video w-full bg-background object-cover"
-                        autoPlay
-                        playsInline
-                        muted
-                      />
-                    </div>
-                    <div className="flex flex-wrap justify-center gap-2">
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="sm"
-                        disabled={cameraStarting}
-                        onClick={handleCapturePhoto}
-                      >
-                        Capture photo
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={closeCamera}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                </div>,
-                document.body,
-              )
-            : null}
-
-          {error ? <FriendlyError message={error} /> : null}
-          {loading ? (
-            <p className="text-[0.9375rem] text-muted sm:text-base" role="status">
-              Loading image…
+          <div className="flex flex-col justify-center space-y-3 rounded-2xl border border-border bg-background/60 p-4">
+            <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">
+              Pick from your screen
             </p>
-          ) : null}
-          </div>
-
-          <div className="min-w-0">
-            {sample ? (
-              <ColourInspector
-                colour={sample.rgb}
-                alpha={sample.alpha}
-                sourceLabel={sample.sourceLabel}
-                coordinates={sample.coordinates}
-                onAddToCycle={() => onAddToCycle(sample.rgb)}
-                onUseAsMarker={() => onUseAsMarker(sample.rgb)}
-              />
-            ) : (
-              <div className="flex h-full min-h-[7.5rem] flex-col justify-center rounded-2xl border border-dashed border-border bg-background/60 p-4 sm:p-5">
-                <p className="font-display text-lg font-semibold tracking-tight text-foreground">
-                  Selected colour
-                </p>
-                <p className="mt-1 text-[0.9375rem] leading-relaxed text-muted sm:text-base">
-                  Sample a pixel from the preview, or pick a colour from your
-                  screen, to see it here.
-                </p>
-              </div>
-            )}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={!eyeDropperSupported}
+              title={
+                eyeDropperSupported
+                  ? "Sample a colour from anywhere on your display"
+                  : EYEDROPPER_UNSUPPORTED
+              }
+              aria-label={
+                eyeDropperSupported
+                  ? "Pick a colour from your screen"
+                  : "Pick a colour from your screen (not supported in this browser)"
+              }
+              onClick={() => void handleEyeDropper()}
+              className="inline-flex w-full items-center justify-center gap-2 sm:w-auto"
+            >
+              <EyedropperIcon />
+              Pick a colour from your screen
+            </Button>
           </div>
         </div>
 
-        <div className="space-y-2">
-          <p className="text-[0.9375rem] font-medium text-foreground sm:text-base">
-            {!image && sample?.sourceLabel === "Screen eyedropper"
-              ? "Colour preview"
-              : "Image preview"}
+        {cameraOpen && typeof document !== "undefined"
+          ? createPortal(
+              <div
+                className="fixed inset-0 z-[100] flex items-center justify-center bg-foreground/40 p-4"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={`${baseId}-camera-title`}
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) closeCamera();
+                }}
+              >
+                <div className="w-full max-w-lg space-y-4 rounded-2xl border border-border bg-surface p-4 shadow-soft-md sm:p-5">
+                  <div>
+                    <h3
+                      id={`${baseId}-camera-title`}
+                      className="font-display text-lg font-semibold text-foreground sm:text-xl"
+                    >
+                      Take a photo
+                    </h3>
+                    <p className="mt-1 text-[0.9375rem] leading-relaxed text-muted sm:text-base">
+                      {cameraStarting
+                        ? "Starting your webcam… If your browser asks for permission, choose Allow."
+                        : "Line up your shot, then click Capture photo. Click Cancel to close the camera."}
+                    </p>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-border bg-background">
+                    <video
+                      ref={cameraVideoRef}
+                      className="aspect-video w-full bg-background object-cover"
+                      autoPlay
+                      playsInline
+                      muted
+                    />
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      disabled={cameraStarting}
+                      onClick={handleCapturePhoto}
+                    >
+                      Capture photo
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={closeCamera}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
+
+        {error ? <FriendlyError message={error} /> : null}
+        {loading ? (
+          <p className="text-[0.9375rem] text-muted sm:text-base" role="status">
+            Loading image…
           </p>
+        ) : null}
+
+        <div className="space-y-2">
+          {sample ? (
+            <ColourInspector
+              title={
+                !image && sample.sourceLabel === "Screen eyedropper"
+                  ? "Colour preview"
+                  : "Image preview"
+              }
+              colour={sample.rgb}
+              alpha={sample.alpha}
+              onAddToCycle={() => onAddToCycle(sample.rgb)}
+              onUseAsMarker={() => onUseAsMarker(sample.rgb)}
+            />
+          ) : (
+            <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-dashed border-border/80 bg-background/40 px-3 py-2 sm:gap-3">
+              <p className="mr-auto shrink-0 text-[0.9375rem] font-medium text-foreground sm:text-base">
+                Image preview
+              </p>
+              <p className="text-sm text-muted">
+                Sample a pixel or pick from your screen
+              </p>
+            </div>
+          )}
           {image ? (
             <>
               <div

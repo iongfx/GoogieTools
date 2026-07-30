@@ -39,7 +39,7 @@ export const CYCLE_LIMITS = {
   minDelaySeconds: 0.5,
   /** Custom delays below this threshold show a photosensitivity warning. */
   photosensitivityWarnBelowSeconds: 1,
-  defaultDelayPreset: "manual" as CycleDelayPreset,
+  defaultDelayPreset: "2" as CycleDelayPreset,
   defaultCustomSeconds: 3,
   defaultAutoSeconds: 3,
 } as const;

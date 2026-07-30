@@ -106,7 +106,13 @@ export async function downloadColourCyclePdf(
   items: readonly ColourCyclePdfItem[],
   choice: ColourExportChoice,
 ): Promise<void> {
-  const logoDataUrl = await loadBrandLogoDataUrl();
+  let logoDataUrl: string | null = null;
+  try {
+    logoDataUrl = await loadBrandLogoDataUrl();
+  } catch {
+    // Still export colours if the brand logo cannot be loaded.
+  }
+
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -117,11 +123,13 @@ export async function downloadColourCyclePdf(
   const colWidth = (contentWidth - colGap) / 2;
   let y = margin;
 
-  // Brand logo (300×58 source) — keep aspect ratio.
-  const logoWidth = 62;
-  const logoHeight = (58 / 300) * logoWidth;
-  doc.addImage(logoDataUrl, "PNG", margin, y, logoWidth, logoHeight);
-  y += logoHeight + 5;
+  if (logoDataUrl) {
+    // Brand logo (300×58 source) — keep aspect ratio.
+    const logoWidth = 62;
+    const logoHeight = (58 / 300) * logoWidth;
+    doc.addImage(logoDataUrl, "PNG", margin, y, logoWidth, logoHeight);
+    y += logoHeight + 5;
+  }
 
   doc.setFont("helvetica", "italic");
   doc.setFontSize(10);

@@ -492,9 +492,9 @@ export function QrGenerator() {
       padding="lg"
       className="border-border shadow-soft-md"
     >
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.95fr)] lg:items-start lg:gap-x-12 lg:gap-y-8">
-        {/* 1) Inputs — first on all screens */}
-        <div className="order-1 min-w-0">
+      <div className="flex flex-col gap-8">
+        {/* 1) Mode controls + form inputs */}
+        <div className="min-w-0">
           <input
             ref={uploadInputRef}
             id={uploadInputId}
@@ -545,6 +545,15 @@ export function QrGenerator() {
               <p className="text-[0.9375rem] text-muted sm:text-base">
                 {DECODE_FILE_TYPES_LABEL}
               </p>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleClear}
+                disabled={!hasAnyInput || busy}
+                className="w-full sm:w-auto"
+              >
+                Clear
+              </Button>
             </div>
           </div>
 
@@ -743,8 +752,8 @@ export function QrGenerator() {
             </fieldset>
             ) : null}
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              {mode === "wifi" ? (
+            {mode === "wifi" ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Button
                   type="button"
                   disabled={busy}
@@ -753,17 +762,8 @@ export function QrGenerator() {
                 >
                   {isPending ? "Creating…" : "Create QR code"}
                 </Button>
-              ) : null}
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleClear}
-                disabled={!hasAnyInput || busy}
-                className="w-full sm:w-auto"
-              >
-                Clear
-              </Button>
-            </div>
+              </div>
+            ) : null}
           </div>
 
           <p className="sr-only" aria-live="polite">
@@ -771,10 +771,10 @@ export function QrGenerator() {
           </p>
         </div>
 
-        {/* 2) Live preview — directly under inputs on phone/tablet; right column on desktop */}
+        {/* 2) Live preview — full width under the mode controls */}
         <div
           ref={previewRef}
-          className="order-2 scroll-mt-28 lg:row-span-2 lg:sticky lg:top-24"
+          className="w-full scroll-mt-28"
         >
           <ToolResultPanel
             label="Live preview"
@@ -970,9 +970,9 @@ export function QrGenerator() {
           </ToolResultPanel>
         </div>
 
-        {/* 3) PNG size — under Create on desktop; above the shared action row */}
+        {/* 3) PNG size — under live preview */}
         {mode !== "upload" ? (
-          <div className="order-3 min-w-0">
+          <div className="min-w-0">
             <div className="max-w-xs">
               <Label htmlFor={sizeId}>PNG download size</Label>
               <Select
